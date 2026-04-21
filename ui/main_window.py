@@ -68,8 +68,7 @@ WINDOW_TITLE = "客户名单数据预处理工具 v1.0.6"
 # ============================================================
 # [FIX M2] 区块间距修正：spacing 16→12
 MARGIN_MAIN = (20, 20, 20, 16)       # 主布局外边距 (上右下左)
-MARGIN_SECTION = (16, 30, 16, 16)   # 区块内边距（标题占用30px）
-MARGIN_SECTION_NARROW = (16, 25, 16, 16)  # 文件加载区块
+MARGIN_SECTION = (16, 12, 16, 16)   # 区块内边距（标题占用30px）
 MARGIN_ROW = (0, 0, 0, 0)           # 行Widget无边距
 MARGIN_BANNER = (16, 12, 16, 12)    # 结果横幅
 MARGIN_ACTION_BAR = (0, 10, 0, 0)   # 底部操作区
@@ -149,6 +148,7 @@ class MainWindow(QMainWindow):
             "dict": None,           # 数据字典文件
             "spec": None,           # 字段规范文件
         }
+        self._dict_version_display = ""  # 标题栏字典版本显示
 
         self._init_ui()
         self._init_status_bar()
@@ -161,6 +161,15 @@ class MainWindow(QMainWindow):
         self._load_default_config()
         
         logger.info("主窗口初始化完成")
+
+    def _update_window_title(self, version_suffix: str = ""):
+        """更新窗口标题（带字典版本显示）- 原型风格"""
+        self._dict_version_display = version_suffix
+        title = WINDOW_TITLE
+        if version_suffix:
+            # 原型格式：📚 字典 v2.3 (2026-04-10)
+            title = f"{WINDOW_TITLE}  |  📚 {version_suffix}"
+        self.setWindowTitle(title)
 
     def _apply_stylesheet(self):
         """加载 QSS 样式表（支持深色模式自动检测）"""
@@ -213,7 +222,7 @@ class MainWindow(QMainWindow):
 
     def _init_ui(self):
         """初始化UI布局"""
-        self.setWindowTitle(WINDOW_TITLE)
+        self._update_window_title()  # 带字典版本的标题
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
         self.setMaximumSize(WINDOW_MAX_WIDTH, WINDOW_MAX_HEIGHT)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -262,9 +271,9 @@ class MainWindow(QMainWindow):
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         group.setMinimumHeight(HEIGHT_GROUP_FILE)
 
-        # [FIX S3] 使用QVBoxLayout嵌套，每个文件占两行（输入框行+文件信息行）
+        # [方案A优化] 单行布局：标签 + 输入框 + 文件信息 + 按钮
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(*MARGIN_SECTION_NARROW)
+        main_layout.setContentsMargins(*MARGIN_SECTION)
         main_layout.setSpacing(8)
 
         self.file_inputs = {}
@@ -281,16 +290,16 @@ class MainWindow(QMainWindow):
         ]
 
         for row_idx, (key, label_text, placeholder, required) in enumerate(file_configs):
-            # 每行一个文件输入区
+            # 单行布局：标签 + 输入框 + 文件信息 + 按钮
             row_widget = QWidget()
-            row_widget.setFixedHeight(36)  # 输入框行高度
+            row_widget.setFixedHeight(36)
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(12)
+            row_layout.setSpacing(8)  # 缩小间距
 
             # 标签
             lbl = QLabel(label_text)
-            lbl.setFixedWidth(LABEL_WIDTH)  # [FIX M1] 统一标签宽度110px
+            lbl.setFixedWidth(LABEL_WIDTH)
             if required:
                 lbl.setText(f"{label_text} *")
                 lbl.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
@@ -298,61 +307,32 @@ class MainWindow(QMainWindow):
                 lbl.setStyleSheet("font-size: 13px; color: #6B7280;")
             row_layout.addWidget(lbl)
 
-            # 输入框
+            # 输入框（缩小宽度，给文件信息和按钮留空间）
             le = QLineEdit()
             le.setPlaceholderText(placeholder)
             le.setMinimumHeight(HEIGHT_ELEMENT)
+            le.setFixedWidth(280)  # 缩小输入框宽度
             if not required:
                 le.setDisabled(True)
-            le.setObjectName(f"txt{key.capitalize()}")
-            row_layout.addWidget(le, 1)
-            self.file_inputs[key] = le  # 添加到字典
+            row_layout.addWidget(le, 0)  # 不再拉伸
+            self.file_inputs[key] = le
+
+            # 文件信息标签（放在按钮左侧）
+            info_lbl = QLabel()
+            info_lbl.setObjectName("fileInfo")
+            info_lbl.setStyleSheet("font-size: 12px; color: #6B7280;")
+            row_layout.addWidget(info_lbl, 1)  # 拉伸占满剩余空间
+            self.file_labels[key] = info_lbl
 
             # 浏览/导入按钮
             btn_text = "导入" if key == "spec" else "浏览"
             btn = QPushButton(btn_text)
-            btn.setObjectName("btnBrowse")
-            btn.setFixedSize(70, HEIGHT_ELEMENT)
+            btn.setFixedSize(60, HEIGHT_ELEMENT)  # 缩小按钮
             btn.clicked.connect(lambda checked, k=key: self._select_file(k))
             row_layout.addWidget(btn)
             self.file_buttons[key] = btn
 
             main_layout.addWidget(row_widget)
-
-            # [FIX S3] 文件信息标签 - 移至输入框下方
-            info_widget = QWidget()
-            info_widget.setFixedHeight(20)  # 文件信息行高度
-            info_layout = QHBoxLayout(info_widget)
-            info_layout.setContentsMargins(LABEL_WIDTH, 0, 0, 0)  # 左对齐到标签
-            info_layout.setSpacing(0)
-
-            info_lbl = QLabel()
-            info_lbl.setObjectName("fileInfo")
-            info_lbl.setStyleSheet("font-size: 12px; color: #6B7280; padding-left: 12px;")
-            info_layout.addWidget(info_lbl)
-            self.file_labels[key] = info_lbl
-
-            main_layout.addWidget(info_widget)
-
-        # [20260420-老谈] ISSUE-14: 开始处理按钮初始应置灰（等待必填文件选择）
-        # [20260420-老谈] ISSUE-13: 添加字典版本显示区域（加载字典后更新）
-        version_widget = QWidget()
-        version_widget.setFixedHeight(28)
-        version_layout = QHBoxLayout(version_widget)
-        version_layout.setContentsMargins(0, 0, 0, 0)
-        version_layout.setSpacing(12)
-
-        lbl_version = QLabel("字典版本：")
-        lbl_version.setFixedWidth(LABEL_WIDTH)
-        lbl_version.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
-        version_layout.addWidget(lbl_version)
-
-        self.lbl_dict_version = QLabel("（未加载）")
-        self.lbl_dict_version.setObjectName("dictVersionLabel")
-        self.lbl_dict_version.setStyleSheet("font-size: 13px; color: #6B7280;")
-        version_layout.addWidget(self.lbl_dict_version, 1)
-
-        main_layout.addWidget(version_widget)
 
         group.setLayout(main_layout)
         return group
@@ -1091,12 +1071,11 @@ class MainWindow(QMainWindow):
                     md5_hash.update(chunk)
             short_hash = md5_hash.hexdigest()[:8]
             filename = os.path.basename(dict_file_path)
-            self.lbl_dict_version.setText(f"{filename} (v{short_hash})")
-            self.lbl_dict_version.setStyleSheet("font-size: 13px; font-weight: 500; color: #059669;")
+            # 原型格式：字典 v{hash} (日期)
+            self._update_window_title(f"字典 v{short_hash} ({datetime.now().strftime('%Y-%m-%d')})")
             logger.info(f"字典版本: {filename} (MD5: {short_hash})")
         except Exception as e:
-            self.lbl_dict_version.setText(f"（版本检测失败: {e}）")
-            self.lbl_dict_version.setStyleSheet("font-size: 13px; color: #DC2626;")
+            self._update_window_title(f"字典 版本检测失败")
             logger.warning(f"字典版本检测失败: {e}")
 
     def _show_about(self):
@@ -1356,7 +1335,7 @@ class MainWindow(QMainWindow):
                     return
             
             self._last_dict_md5 = md5_short
-            self.lbl_dict_version.setText(f"v{md5_short}（{datetime.now().strftime('%H:%M')}）")
+            self._update_window_title(f"字典 v{md5_short} ({datetime.now().strftime('%Y-%m-%d')})")
             
         except Exception as e:
             logger.warning(f"MD5计算失败: {e}")
@@ -1903,8 +1882,8 @@ class MainWindow(QMainWindow):
                 except Exception:
                     time_info = f" | 导入: {last_dict_time}"
             
-            display_md5 = f"v{last_dict_md5 or '?'}" if last_dict_md5 else "（无版本）"
-            self.lbl_dict_version.setText(f"{display_md5}{time_info} ✅默认值")
+            display_md5 = f"v{last_dict_md5 or '?'}" if last_dict_md5 else ""
+            self._update_window_title(f"字典 {display_md5} (默认值)")
             self._log_message("INFO", f"已自动加载字典：{os.path.basename(last_dict_path)} {display_md5}{time_info}")
             logger.info(f"自动加载字典: {last_dict_path}")
 
