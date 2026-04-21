@@ -69,6 +69,7 @@ WINDOW_TITLE = "客户名单数据预处理工具 v1.0.6"
 # [FIX M2] 区块间距修正：spacing 16→12
 MARGIN_MAIN = (20, 20, 20, 16)       # 主布局外边距 (上右下左)
 MARGIN_SECTION = (16, 12, 16, 16)   # 区块内边距（标题占用30px）
+MARGIN_SECTION_NARROW = (16, 12, 16, 16)  # 文件加载区块
 MARGIN_ROW = (0, 0, 0, 0)           # 行Widget无边距
 MARGIN_BANNER = (16, 12, 16, 12)    # 结果横幅
 MARGIN_ACTION_BAR = (0, 10, 0, 0)   # 底部操作区
@@ -271,9 +272,9 @@ class MainWindow(QMainWindow):
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         group.setMinimumHeight(HEIGHT_GROUP_FILE)
 
-        # [方案A优化] 单行布局：标签 + 输入框 + 文件信息 + 按钮
+        # [原型还原] 双行布局：第一行（标签+输入框+按钮）、第二行（文件信息）
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(*MARGIN_SECTION)
+        main_layout.setContentsMargins(*MARGIN_SECTION_NARROW)
         main_layout.setSpacing(8)
 
         self.file_inputs = {}
@@ -290,12 +291,12 @@ class MainWindow(QMainWindow):
         ]
 
         for key, label_text, placeholder, required in file_configs:
-            # 单行布局：标签 + 输入框 + 文件信息 + 按钮
-            row_widget = QWidget()
-            row_widget.setFixedHeight(36)
-            row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(8)
+            # 第一行：标签 + 输入框 + 按钮
+            input_row = QWidget()
+            input_row.setFixedHeight(36)
+            input_layout = QHBoxLayout(input_row)
+            input_layout.setContentsMargins(0, 0, 0, 0)
+            input_layout.setSpacing(8)
 
             # 标签
             lbl = QLabel(label_text)
@@ -304,33 +305,39 @@ class MainWindow(QMainWindow):
                 "font-size: 13px; font-weight: 500; color: #111827;" if required
                 else "font-size: 13px; color: #6B7280;"
             )
-            row_layout.addWidget(lbl)
+            input_layout.addWidget(lbl)
 
             # 输入框
             le = QLineEdit()
             le.setPlaceholderText(placeholder)
             le.setMinimumHeight(HEIGHT_ELEMENT)
-            le.setFixedWidth(280)
             if not required:
                 le.setDisabled(True)
-            row_layout.addWidget(le, 0)
+            input_layout.addWidget(le, 1)
             self.file_inputs[key] = le
-
-            # 文件信息标签
-            info_lbl = QLabel()
-            info_lbl.setObjectName("fileInfo")
-            info_lbl.setStyleSheet("font-size: 12px; color: #6B7280;")
-            row_layout.addWidget(info_lbl, 1)
-            self.file_labels[key] = info_lbl
 
             # 浏览/导入按钮
             btn = QPushButton("导入" if key == "spec" else "浏览")
             btn.setFixedSize(60, HEIGHT_ELEMENT)
             btn.clicked.connect(lambda checked, k=key: self._select_file(k))
-            row_layout.addWidget(btn)
+            input_layout.addWidget(btn)
             self.file_buttons[key] = btn
 
-            main_layout.addWidget(row_widget)
+            main_layout.addWidget(input_row)
+
+            # 第二行：文件信息（margin-left: 122px，与原型一致）
+            info_row = QWidget()
+            info_row_layout = QHBoxLayout(info_row)
+            info_row_layout.setContentsMargins(122, 0, 0, 0)
+            info_row_layout.setSpacing(0)
+
+            info_lbl = QLabel()
+            info_lbl.setObjectName("fileInfo")
+            info_lbl.setStyleSheet("font-size: 12px; color: #6B7280;")
+            info_row_layout.addWidget(info_lbl)
+            self.file_labels[key] = info_lbl
+
+            main_layout.addWidget(info_row)
 
         group.setLayout(main_layout)
         return group
