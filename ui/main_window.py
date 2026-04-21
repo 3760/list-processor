@@ -250,30 +250,44 @@ class MainWindow(QMainWindow):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setStyleSheet("background-color: #F3F4F6;")
 
-        # 滚动内容容器
+        # 滚动内容容器（内边距容器）
         scroll_content = QWidget()
+        scroll_content.setStyleSheet("background-color: #F3F4F6;")
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setContentsMargins(*MARGIN_MAIN)
         scroll_layout.setSpacing(SPACING_MAIN)
         scroll_layout.setSizeConstraint(QVBoxLayout.SetMinAndMaxSize)
 
+        # 内容包装器（承载区块）
+        content_wrapper = QWidget()
+        content_wrapper.setStyleSheet("background-color: #FFFFFF; border-radius: 8px;")
+        wrapper_layout = QVBoxLayout(content_wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(SPACING_MAIN)
+
         # 1. 文件加载区块
-        scroll_layout.addWidget(self._create_file_section())
+        wrapper_layout.addWidget(self._create_file_section())
 
         # 2. 处理配置区块
-        scroll_layout.addWidget(self._create_config_section())
+        wrapper_layout.addWidget(self._create_config_section())
 
         # 3. 执行模块区块
-        scroll_layout.addWidget(self._create_module_section())
+        wrapper_layout.addWidget(self._create_module_section())
 
         # 4. 处理进度区块
         self.progress_container = self._create_progress_section()
-        scroll_layout.addWidget(self.progress_container)
+        wrapper_layout.addWidget(self.progress_container)
 
         # 5. 结果横幅（默认隐藏）
         self.result_banner = self._create_result_banner()
         self.result_banner.setVisible(False)
-        scroll_layout.addWidget(self.result_banner)
+        wrapper_layout.addWidget(self.result_banner)
+
+        # 弹性空间
+        wrapper_layout.addStretch()
+
+        # 将包装器添加到滚动内容
+        scroll_layout.addWidget(content_wrapper)
 
         # 滚动内容添加到滚动区域
         scroll_area.setWidget(scroll_content)

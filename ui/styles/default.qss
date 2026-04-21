@@ -38,9 +38,8 @@ QMainWindow {
 QGroupBox {
     background-color: #FFFFFF;
     border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    margin-top: 12px;
-    padding-top: 16px;
+    border-radius: 0;
+    margin-top: 0;
     padding: 16px;
     font-size: 14px;
     font-weight: 600;
