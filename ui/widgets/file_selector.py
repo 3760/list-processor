@@ -125,6 +125,22 @@ class FileSelector(QWidget):
         # 选择文件按钮
         btn = QPushButton("选择文件...")
         btn.setMaximumWidth(100)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FFFFFF;
+                color: #374151;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                min-height: 36px;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: #F9FAFB;
+                border-color: #9CA3AF;
+            }
+        """)
         btn.clicked.connect(lambda: self._select_file(file_type))
         row.addWidget(btn)
         setattr(self, f"btn_{file_type}", btn)

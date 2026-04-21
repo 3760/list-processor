@@ -55,14 +55,38 @@ logger = get_logger(__name__)
 # ============================================================
 # 界面尺寸常量
 # ============================================================
-# [优化] 窗口尺寸：默认最大化，可滚动
-WINDOW_WIDTH = 1400
-WINDOW_HEIGHT = 1000
+# [FIX S1] 窗口尺寸修正：1100x1500 → 1000x750
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 750
 WINDOW_MIN_WIDTH = 900
 WINDOW_MIN_HEIGHT = 700
-WINDOW_MAX_WIDTH = 1400
-WINDOW_MAX_HEIGHT = 1000
+WINDOW_MAX_WIDTH = 1200
+WINDOW_MAX_HEIGHT = 900
 WINDOW_TITLE = "客户名单数据预处理工具 v1.0.6"
+
+# ============================================================
+# 区块样式常量（统一圆角 8px）
+# ============================================================
+GROUPBOX_STYLE = """
+    QGroupBox {
+        background-color: #FFFFFF;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        margin-top: 8px;
+        padding: 12px 16px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #111827;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        left: 12px;
+        top: -4px;
+        padding: 0 8px;
+        color: #374151;
+    }
+"""
 
 # ============================================================
 # 布局间距常量
@@ -73,7 +97,7 @@ MARGIN_SECTION = (16, 12, 16, 16)   # 区块内边距（标题占用30px）
 MARGIN_SECTION_NARROW = (16, 12, 16, 16)  # 文件加载区块
 MARGIN_ROW = (0, 0, 0, 0)           # 行Widget无边距
 MARGIN_BANNER = (16, 12, 16, 12)    # 结果横幅
-MARGIN_ACTION_BAR = (0, 10, 0, 0)   # 底部操作区
+MARGIN_ACTION_BAR = (0, 26, 32, 32)  # 底部操作区（左侧32与区块内容对齐，右侧+滚动条宽度）
 
 SPACING_MAIN = 12                   # [FIX M2] 区块之间间距 16→12
 SPACING_ROW = 15                    # 行内间距（标签与输入框）
@@ -85,20 +109,116 @@ SPACING_CHECKBOX = 48               # [FIX M4] 复选框之间间距 30→48
 # 高度常量
 # ============================================================
 # [FIX S2] 组件高度统一：36px
-HEIGHT_GROUP_FILE = 220             # 文件加载区块
-HEIGHT_GROUP_CONFIG = 130           # [FIX] 处理配置区块 150→130
-HEIGHT_GROUP_MODULE = 180           # [FIX] 执行模块区块 220→180
-HEIGHT_PROGRESS = 280              # [FIX] 处理进度区块 300→280
+HEIGHT_GROUP_FILE = 200             # 文件加载区块（220→200）
+HEIGHT_GROUP_CONFIG = 110           # 处理配置区块（130→110）
+HEIGHT_GROUP_MODULE = 160           # 执行模块区块（180→160）
+HEIGHT_PROGRESS = 200              # 处理进度区块（280→200）
 HEIGHT_BANNER = 50                  # 结果横幅
-HEIGHT_LOG = 100                   # [FIX] 日志区域 120→100
-HEIGHT_ROW_NORMAL = 40              # [FIX] 普通行高度 50→40
-HEIGHT_ROW_MODULE = 36              # [FIX M3] 模块行高度 44→36
-HEIGHT_ELEMENT = 36                 # [FIX S2] 控件元素高度 40→36
+HEIGHT_LOG = 80                   # 日志区域（100→80）
+HEIGHT_ROW_NORMAL = 40              # 普通行高度（与input_row一致）
+HEIGHT_ROW_MODULE = 36              # 模块行高度
+HEIGHT_ELEMENT = 36                 # 控件元素高度
 HEIGHT_CHECKBOX = 36                # 复选框高度
 HEIGHT_BUTTON_BANNER = 32           # 横幅按钮高度
 HEIGHT_BUTTON_LARGE = 44            # 大按钮高度（开始处理）
 HEIGHT_CLOSE_BANNER = 24            # 关闭按钮尺寸
 LABEL_WIDTH = 110                   # [FIX M1] 标签宽度统一为110px
+
+# ============================================================
+# 按钮样式常量
+# ============================================================
+BUTTON_STYLE_SECONDARY = """
+    QPushButton {
+        background-color: #FFFFFF;
+        color: #374151;
+        border: 1px solid #D1D5DB;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        min-height: 36px;
+        padding: 0 16px;
+    }
+    QPushButton:hover {
+        background-color: #F9FAFB;
+        border-color: #9CA3AF;
+    }
+    QPushButton:pressed {
+        background-color: #F3F4F6;
+    }
+    QPushButton:disabled {
+        background-color: #F3F4F6;
+        color: #9CA3AF;
+        border-color: #E5E7EB;
+    }
+"""
+
+BUTTON_STYLE_CLOSE = """
+    QPushButton {
+        background-color: transparent;
+        color: #6B7280;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        font-weight: bold;
+    }
+    QPushButton:hover {
+        background-color: rgba(0, 0, 0, 0.1);
+        color: #374151;
+    }
+"""
+
+# ============================================================
+# 输入框样式常量
+# ============================================================
+LINEEDIT_STYLE = """
+    QLineEdit {
+        border: 1px solid #E5E7EB;
+        border-radius: 6px;
+        background-color: #FFFFFF;
+        font-size: 13px;
+        color: #111827;
+        padding: 0 12px;
+    }
+    QLineEdit:focus {
+        border-color: #2563EB;
+    }
+    QLineEdit:hover:not(:focus):not(:disabled) {
+        border-color: #9CA3AF;
+    }
+    QLineEdit:disabled {
+        background-color: #F3F4F6;
+        color: #9CA3AF;
+    }
+"""
+
+# ============================================================
+# 复选框样式常量
+# ============================================================
+CHECKBOX_STYLE = """
+    QCheckBox {
+        font-size: 13px;
+        color: #374151;
+        spacing: 8px;
+    }
+    QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        border: 2px solid #D1D5DB;
+        background-color: #FFFFFF;
+    }
+    QCheckBox::indicator:hover {
+        border-color: #9CA3AF;
+    }
+    QCheckBox::indicator:checked {
+        background-color: #2563EB;
+        border-color: #2563EB;
+    }
+    QCheckBox::indicator:checked:hover {
+        background-color: #3B82F6;
+        border-color: #3B82F6;
+    }
+"""
 
 
 class MainWindow(QMainWindow):
@@ -248,19 +368,19 @@ class MainWindow(QMainWindow):
         scroll_area.setFrameShape(QScrollArea.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("background-color: #F3F4F6;")
+        scroll_area.setStyleSheet("background-color: #FFFFFF;")
 
         # 滚动内容容器（内边距容器）
         scroll_content = QWidget()
-        scroll_content.setStyleSheet("background-color: #F3F4F6;")
+        scroll_content.setStyleSheet("background-color: #FFFFFF;")
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setContentsMargins(*MARGIN_MAIN)
         scroll_layout.setSpacing(SPACING_MAIN)
         scroll_layout.setSizeConstraint(QVBoxLayout.SetMinAndMaxSize)
 
-        # 内容包装器（承载区块）
+        # 内容包装器（承载区块）- 白色背景无圆角
         content_wrapper = QWidget()
-        content_wrapper.setStyleSheet("background-color: #FFFFFF; border-radius: 8px;")
+        content_wrapper.setStyleSheet("background-color: #FFFFFF;")
         wrapper_layout = QVBoxLayout(content_wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
         wrapper_layout.setSpacing(SPACING_MAIN)
@@ -304,6 +424,7 @@ class MainWindow(QMainWindow):
         group = QGroupBox()
         group.setTitle("📁 文件加载")
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        group.setStyleSheet(GROUPBOX_STYLE)
 
         # [原型还原] 双行布局：第一行（标签+输入框+按钮）、第二行（文件信息）
         main_layout = QVBoxLayout()
@@ -324,8 +445,9 @@ class MainWindow(QMainWindow):
         ]
 
         for key, label_text, placeholder, required in file_configs:
-            # 第一行：标签 + 输入框 + 按钮（自适应高度）
+            # 第一行：标签 + 输入框 + 按钮（固定高度 40px）
             input_row = QWidget()
+            input_row.setFixedHeight(40)
             input_layout = QHBoxLayout(input_row)
             input_layout.setContentsMargins(0, 0, 0, 0)
             input_layout.setSpacing(8)
@@ -342,7 +464,8 @@ class MainWindow(QMainWindow):
             # 输入框
             le = QLineEdit()
             le.setPlaceholderText(placeholder)
-            le.setFixedHeight(HEIGHT_ELEMENT)
+            le.setFixedHeight(36)  # 输入框高度保持 36px
+            le.setStyleSheet(LINEEDIT_STYLE)
             if not required:
                 le.setDisabled(True)
             input_layout.addWidget(le, 1)
@@ -350,17 +473,19 @@ class MainWindow(QMainWindow):
 
             # 浏览/导入按钮（统一尺寸 80x36）
             btn = QPushButton("导入" if key == "spec" else "浏览")
-            btn.setFixedSize(80, HEIGHT_ELEMENT)
+            btn.setFixedSize(80, 36)  # 按钮高度保持 36px
+            btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
             btn.clicked.connect(lambda checked, k=key: self._select_file(k))
             input_layout.addWidget(btn)
             self.file_buttons[key] = btn
 
             main_layout.addWidget(input_row)
 
-            # 第二行：文件信息（margin-left: 122px，与原型一致）
+            # 第二行：文件信息（固定高度 20px）
             info_row = QWidget()
+            info_row.setFixedHeight(20)
             info_row_layout = QHBoxLayout(info_row)
-            info_row_layout.setContentsMargins(122, 0, 0, 0)
+            info_row_layout.setContentsMargins(134, 0, 0, 0)
             info_row_layout.setSpacing(0)
 
             info_lbl = QLabel()
@@ -379,12 +504,12 @@ class MainWindow(QMainWindow):
         group = QGroupBox()
         group.setTitle("⚙️ 处理配置")
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        group.setMinimumHeight(HEIGHT_GROUP_CONFIG)
+        group.setStyleSheet(GROUPBOX_STYLE)
 
         # 使用 QVBoxLayout + QHBoxLayout 嵌套，确保每行独立布局
         layout = QVBoxLayout()
         layout.setContentsMargins(*MARGIN_SECTION)
-        layout.setSpacing(20)
+        layout.setSpacing(12)  # 区块内间距 12px
 
         # ========== 第一行：去重字段 ==========
         row1_widget = QWidget()
@@ -392,7 +517,7 @@ class MainWindow(QMainWindow):
         row1_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         row1_layout = QHBoxLayout(row1_widget)
         row1_layout.setContentsMargins(*MARGIN_ROW)
-        row1_layout.setSpacing(SPACING_ROW)
+        row1_layout.setSpacing(8)  # 与文件加载区块一致
 
         lbl_dedup = QLabel("去重字段")
         lbl_dedup.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
@@ -420,8 +545,8 @@ class MainWindow(QMainWindow):
 
         btn_select_dedup = QPushButton("选择字段")
         btn_select_dedup.setObjectName("btnSelectDedup")
-        btn_select_dedup.setFixedSize(80, HEIGHT_ELEMENT)
-        btn_select_dedup.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        btn_select_dedup.setFixedSize(80, 36)  # 统一按钮尺寸
+        btn_select_dedup.setStyleSheet(BUTTON_STYLE_SECONDARY)
         btn_select_dedup.clicked.connect(self._select_dedup_field)
         row1_layout.addWidget(btn_select_dedup)
 
@@ -433,7 +558,7 @@ class MainWindow(QMainWindow):
         row2_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         row2_layout = QHBoxLayout(row2_widget)
         row2_layout.setContentsMargins(*MARGIN_ROW)
-        row2_layout.setSpacing(SPACING_ROW)
+        row2_layout.setSpacing(8)  # 与文件加载区块一致
 
         lbl_output = QLabel("输出目录")
         lbl_output.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
@@ -447,12 +572,13 @@ class MainWindow(QMainWindow):
         self.txt_output.setFixedHeight(HEIGHT_ELEMENT)
         self.txt_output.setMinimumWidth(200)
         self.txt_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.txt_output.setStyleSheet(LINEEDIT_STYLE)
         row2_layout.addWidget(self.txt_output, 1)
 
         btn_output = QPushButton("浏览")
         btn_output.setObjectName("btnBrowse")
-        btn_output.setFixedSize(80, HEIGHT_ELEMENT)
-        btn_output.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        btn_output.setFixedSize(80, 36)  # 统一按钮尺寸
+        btn_output.setStyleSheet(BUTTON_STYLE_SECONDARY)
         btn_output.clicked.connect(self._select_output_dir)
         row2_layout.addWidget(btn_output)
 
@@ -560,7 +686,7 @@ class MainWindow(QMainWindow):
         group = QGroupBox()
         group.setTitle("▶️ 执行模块（可勾选）")
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        group.setMinimumHeight(HEIGHT_GROUP_MODULE)
+        group.setStyleSheet(GROUPBOX_STYLE)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(*MARGIN_SECTION)
@@ -581,6 +707,7 @@ class MainWindow(QMainWindow):
         cb1.setChecked(True)
         cb1.setFixedHeight(HEIGHT_CHECKBOX)
         cb1.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        cb1.setStyleSheet(CHECKBOX_STYLE)
         row1_layout.addWidget(cb1)
         self.checkboxes["field_validation"] = cb1
 
@@ -588,6 +715,7 @@ class MainWindow(QMainWindow):
         cb2.setChecked(True)
         cb2.setFixedHeight(HEIGHT_CHECKBOX)
         cb2.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        cb2.setStyleSheet(CHECKBOX_STYLE)
         row1_layout.addWidget(cb2)
         self.checkboxes["cross_dedup"] = cb2
 
@@ -606,6 +734,7 @@ class MainWindow(QMainWindow):
         cb3.setChecked(True)
         cb3.setFixedHeight(HEIGHT_CHECKBOX)
         cb3.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        cb3.setStyleSheet(CHECKBOX_STYLE)
         row2_layout.addWidget(cb3)
         self.checkboxes["dict_encode"] = cb3
 
@@ -613,6 +742,7 @@ class MainWindow(QMainWindow):
         cb4.setChecked(True)
         cb4.setFixedHeight(HEIGHT_CHECKBOX)
         cb4.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        cb4.setStyleSheet(CHECKBOX_STYLE)
         row2_layout.addWidget(cb4)
         self.checkboxes["dict_validation"] = cb4
 
@@ -631,8 +761,12 @@ class MainWindow(QMainWindow):
         cb5.setChecked(True)
         cb5.setFixedHeight(HEIGHT_CHECKBOX)  # [FIX M3] 使用统一高度常量
         cb5.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        cb5.setStyleSheet(CHECKBOX_STYLE)
         row3_layout.addWidget(cb5)
         self.checkboxes["internal_dedup"] = cb5
+
+        # 占位块确保与第二列对齐
+        row3_layout.addSpacing(SPACING_CHECKBOX)
 
         row3_layout.addStretch()
         layout.addWidget(row3_widget)
@@ -640,21 +774,17 @@ class MainWindow(QMainWindow):
         group.setLayout(layout)
         return group
 
-    def _create_progress_section(self) -> QWidget:
+    def _create_progress_section(self) -> QGroupBox:
         """创建处理进度区块"""
-        container = QWidget()
+        container = QGroupBox()
+        container.setTitle("📊 处理进度")
         container.setObjectName("progressContainer")
-        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        container.setMinimumHeight(HEIGHT_PROGRESS)
+        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        container.setStyleSheet(GROUPBOX_STYLE)
 
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(SPACING_MAIN)
-
-        # 区块标题
-        lbl_title = QLabel("📊 处理进度")
-        lbl_title.setStyleSheet("font-size: 14px; font-weight: 600; color: #111827;")
-        layout.addWidget(lbl_title)
+        layout.setContentsMargins(16, 20, 16, 12)  # 区块内边距
+        layout.setSpacing(8)
 
         # 状态标签
         self.lbl_module = QLabel("等待处理...")
@@ -713,7 +843,7 @@ class MainWindow(QMainWindow):
         # 查看详情按钮（警告状态用）
         self.btn_view_detail = QPushButton("查看详情")
         self.btn_view_detail.setObjectName("btnViewDetail")
-        self.btn_view_detail.setMinimumHeight(HEIGHT_BUTTON_BANNER)
+        self.btn_view_detail.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_view_detail.setVisible(False)
         self.btn_view_detail.clicked.connect(self._on_view_detail_clicked)
         banner_btn_layout.addWidget(self.btn_view_detail)
@@ -721,7 +851,7 @@ class MainWindow(QMainWindow):
         # 打开输出目录按钮（成功状态用）
         self.btn_open_output = QPushButton("📂 打开输出目录")
         self.btn_open_output.setObjectName("btnOpenOutput")
-        self.btn_open_output.setMinimumHeight(32)
+        self.btn_open_output.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_open_output.setVisible(False)
         self.btn_open_output.clicked.connect(self._on_open_output_dir)
         banner_btn_layout.addWidget(self.btn_open_output)
@@ -732,6 +862,7 @@ class MainWindow(QMainWindow):
         btn_close = QPushButton("×")
         btn_close.setObjectName("btnBannerClose")
         btn_close.setFixedSize(HEIGHT_CLOSE_BANNER, HEIGHT_CLOSE_BANNER)
+        btn_close.setStyleSheet(BUTTON_STYLE_CLOSE)
         btn_close.clicked.connect(lambda: self.result_banner.setVisible(False))
         layout.addWidget(btn_close)
 
@@ -898,13 +1029,14 @@ class MainWindow(QMainWindow):
         """创建底部操作区"""
         container = QWidget()
         layout = QHBoxLayout(container)
-        layout.setContentsMargins(*MARGIN_ACTION_BAR)
+        layout.setContentsMargins(16, 26, 32, 0)  # 左边0，右边32(16+滚动条)
         layout.setSpacing(SPACING_MAIN)
 
         # 左侧：历史按钮
         self.btn_history = QPushButton("📋 处理历史")
         self.btn_history.setObjectName("btnHistory")
         self.btn_history.setMinimumWidth(110)
+        self.btn_history.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_history.clicked.connect(self._on_show_history)
         layout.addWidget(self.btn_history)
 
@@ -913,9 +1045,28 @@ class MainWindow(QMainWindow):
 
         self.btn_start = QPushButton("▶️ 开始处理")
         self.btn_start.setObjectName("btnStart")
-        self.btn_start.setFixedWidth(200)  # 固定宽度200px
-        self.btn_start.setMinimumHeight(HEIGHT_BUTTON_LARGE)
-        self.btn_start.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
+        self.btn_start.setFixedWidth(200)
+        self.btn_start.setMinimumHeight(44)
+        self.btn_start.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #3B82F6;
+            }
+            QPushButton:pressed {
+                background-color: #1D4ED8;
+            }
+            QPushButton:disabled {
+                background-color: #E5E7EB;
+                color: #9CA3AF;
+            }
+        """)
         self.btn_start.clicked.connect(self._on_start_processing)
         layout.addWidget(self.btn_start)
 
@@ -925,6 +1076,7 @@ class MainWindow(QMainWindow):
         self.btn_cancel = QPushButton("取消")
         self.btn_cancel.setObjectName("btnCancel")
         self.btn_cancel.setMinimumWidth(80)
+        self.btn_cancel.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._on_cancel_processing)
         layout.addWidget(self.btn_cancel)
@@ -932,6 +1084,7 @@ class MainWindow(QMainWindow):
         self.btn_version = QPushButton("ℹ️ 版本")
         self.btn_version.setObjectName("btnVersion")
         self.btn_version.setMinimumWidth(80)
+        self.btn_version.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_version.clicked.connect(self._on_show_version)
         layout.addWidget(self.btn_version)
 

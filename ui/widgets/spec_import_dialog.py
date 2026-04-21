@@ -95,6 +95,22 @@ class SpecImportDialog(QDialog):
         self.file_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         self.select_file_btn = QPushButton("选择属性导入模版...")
+        self.select_file_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FFFFFF;
+                color: #374151;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                min-height: 36px;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: #F9FAFB;
+                border-color: #9CA3AF;
+            }
+        """)
         self.select_file_btn.clicked.connect(self._on_select_file)
 
         file_layout.addWidget(QLabel("文件："))

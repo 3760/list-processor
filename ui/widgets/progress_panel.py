@@ -93,10 +93,7 @@ class ProgressPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # 总体进度区
-        progress_layout = QHBoxLayout()
-
-        # 进度条
+        # 总体进度区（进度条自带百分比显示，无需额外标签）
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -106,12 +103,13 @@ class ProgressPanel(QWidget):
         # [规范2.2] 进度条渐变光泽效果 + 条纹动画
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: 1px solid #e0e0e0;
-                border-radius: 5px;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
                 text-align: center;
                 font-weight: bold;
                 font-size: 12px;
                 color: #6B7280;
+                background-color: #FFFFFF;
             }
             QProgressBar::chunk {
                 /* 渐变光泽效果 */
@@ -121,19 +119,10 @@ class ProgressPanel(QWidget):
                     stop: 0.5 #3B82F6,
                     stop: 1 #2563EB
                 );
-                border-radius: 4px;
+                border-radius: 8px;
             }
         """)
-        progress_layout.addWidget(self.progress_bar)
-
-        # 百分比标签
-        self.percent_label = QLabel("0%")
-        self.percent_label.setMinimumWidth(50)
-        self.percent_label.setAlignment(Qt.AlignCenter)
-        self.percent_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        progress_layout.addWidget(self.percent_label)
-
-        layout.addLayout(progress_layout)
+        layout.addWidget(self.progress_bar)
 
         # 当前阶段标签
         self.stage_label = QLabel("等待开始...")
@@ -143,8 +132,8 @@ class ProgressPanel(QWidget):
                 color: #666;
                 font-size: 13px;
                 padding: 5px;
-                background-color: #f5f5f5;
-                border-radius: 3px;
+                background-color: #F3F4F6;
+                border-radius: 8px;
             }
         """)
         layout.addWidget(self.stage_label)
@@ -157,9 +146,9 @@ class ProgressPanel(QWidget):
         self.module_status_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.module_status_frame.setStyleSheet("""
             QFrame {
-                background-color: #fafafa;
-                border: 1px solid #e0e0e0;
-                border-radius: 3px;
+                background-color: #F9FAFB;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
             }
         """)
         module_layout = QVBoxLayout(self.module_status_frame)
@@ -212,7 +201,6 @@ class ProgressPanel(QWidget):
     def _reset_ui(self):
         """重置UI状态"""
         self.progress_bar.setValue(0)
-        self.percent_label.setText("0%")
         self.stage_label.setText("准备中...")
 
         for module in ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
@@ -308,9 +296,7 @@ class ProgressPanel(QWidget):
         self._progress_animation.setStartValue(current_value)
         self._progress_animation.setEndValue(target_value)
         self._progress_animation.start()
-        
-        # 更新百分比标签
-        self.percent_label.setText(f"{target_value}%")
+        # 进度条自带百分比显示，无需额外标签
 
     def on_complete(self, success: bool = True):
         """
@@ -326,16 +312,15 @@ class ProgressPanel(QWidget):
 
         if success:
             self.progress_bar.setValue(100)
-            self.percent_label.setText("100%")
             self.stage_label.setText("✅ 处理完成")
             self.stage_label.setStyleSheet("""
                 QLabel {
-                    color: #4CAF50;
+                    color: #16A34A;
                     font-size: 13px;
                     font-weight: bold;
                     padding: 5px;
-                    background-color: #e8f5e9;
-                    border-radius: 3px;
+                    background-color: #DCFCE7;
+                    border-radius: 8px;
                 }
             """)
             self.eta_label.setText("")
@@ -348,12 +333,12 @@ class ProgressPanel(QWidget):
             self.stage_label.setText("❌ 处理失败")
             self.stage_label.setStyleSheet("""
                 QLabel {
-                    color: #f44336;
+                    color: #DC2626;
                     font-size: 13px;
                     font-weight: bold;
                     padding: 5px;
-                    background-color: #ffebee;
-                    border-radius: 3px;
+                    background-color: #FEE2E2;
+                    border-radius: 8px;
                 }
             """)
 
@@ -374,12 +359,12 @@ class ProgressPanel(QWidget):
         self.stage_label.setText(f"❌ 错误: {error_message[:30]}...")
         self.stage_label.setStyleSheet("""
             QLabel {
-                color: #f44336;
+                color: #DC2626;
                 font-size: 13px;
                 font-weight: bold;
                 padding: 5px;
-                background-color: #ffebee;
-                border-radius: 3px;
+                background-color: #FEE2E2;
+                border-radius: 8px;
             }
         """)
         self.eta_label.setText("")
@@ -398,8 +383,8 @@ class ProgressPanel(QWidget):
                 color: #666;
                 font-size: 13px;
                 padding: 5px;
-                background-color: #f5f5f5;
-                border-radius: 3px;
+                background-color: #F3F4F6;
+                border-radius: 8px;
             }
         """)
         self.eta_label.setText("")

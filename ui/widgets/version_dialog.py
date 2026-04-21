@@ -200,6 +200,24 @@ class VersionAddDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 16)
         layout.setSpacing(12)
+        
+        lineedit_style = """
+            QLineEdit {
+                border: 1px solid #E5E7EB;
+                border-radius: 6px;
+                background-color: #FFFFFF;
+                font-size: 13px;
+                color: #111827;
+                padding: 0 12px;
+                min-height: 36px;
+            }
+            QLineEdit:focus {
+                border-color: #2563EB;
+            }
+            QLineEdit:hover:not(:focus):not(:disabled) {
+                border-color: #9CA3AF;
+            }
+        """
 
         # 表单布局
         form = QFormLayout()
@@ -208,11 +226,13 @@ class VersionAddDialog(QDialog):
         # 版本号
         self.version_input = QLineEdit()
         self.version_input.setPlaceholderText("例如: 1.0.2")
+        self.version_input.setStyleSheet(lineedit_style)
         form.addRow("版本号:", self.version_input)
 
         # 作者
         self.author_input = QLineEdit()
         self.author_input.setPlaceholderText("例如: 老谈")
+        self.author_input.setStyleSheet(lineedit_style)
         form.addRow("作者:", self.author_input)
 
         layout.addLayout(form)
@@ -250,12 +270,46 @@ class VersionAddDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
+        btn_style = """
+            QPushButton {
+                background-color: #FFFFFF;
+                color: #374151;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                min-height: 36px;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: #F9FAFB;
+                border-color: #9CA3AF;
+            }
+        """
+        
+        btn_primary_style = """
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                min-height: 36px;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: #3B82F6;
+            }
+        """
+
         btn_cancel = QPushButton("取消")
+        btn_cancel.setStyleSheet(btn_style)
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel)
 
         btn_save = QPushButton("保存")
-        btn_save.setObjectName("btnPrimary")
+        btn_save.setStyleSheet(btn_primary_style)
         btn_save.clicked.connect(self._on_save)
         btn_layout.addWidget(btn_save)
 
