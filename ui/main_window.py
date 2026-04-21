@@ -54,9 +54,9 @@ logger = get_logger(__name__)
 # ============================================================
 # 界面尺寸常量
 # ============================================================
-# [FIX S1] 窗口尺寸修正：1000×750px
-WINDOW_WIDTH = 1000
-WINDOW_HEIGHT = 750
+# [优化] 窗口尺寸：默认最大化，可滚动
+WINDOW_WIDTH = 1400
+WINDOW_HEIGHT = 1000
 WINDOW_MIN_WIDTH = 900
 WINDOW_MIN_HEIGHT = 700
 WINDOW_MAX_WIDTH = 1400
@@ -236,34 +236,52 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # 主布局
+        # 主布局：垂直排列（滚动区域 + 固定底部）
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(*MARGIN_MAIN)
-        main_layout.setSpacing(SPACING_MAIN)
+        main_layout.setContentsMargins(0, 0, 0, 0)  # 边缘无边距
+        main_layout.setSpacing(0)
+
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # 滚动内容容器
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(*MARGIN_MAIN)
+        scroll_layout.setSpacing(SPACING_MAIN)
+        scroll_layout.setSizeConstraint(QVBoxLayout.SetMinAndMaxSize)
 
         # 1. 文件加载区块
-        main_layout.addWidget(self._create_file_section())
+        scroll_layout.addWidget(self._create_file_section())
 
         # 2. 处理配置区块
-        main_layout.addWidget(self._create_config_section())
+        scroll_layout.addWidget(self._create_config_section())
 
         # 3. 执行模块区块
-        main_layout.addWidget(self._create_module_section())
+        scroll_layout.addWidget(self._create_module_section())
 
         # 4. 处理进度区块
         self.progress_container = self._create_progress_section()
-        main_layout.addWidget(self.progress_container)
+        scroll_layout.addWidget(self.progress_container)
 
         # 5. 结果横幅（默认隐藏）
         self.result_banner = self._create_result_banner()
         self.result_banner.setVisible(False)
-        main_layout.addWidget(self.result_banner)
+        scroll_layout.addWidget(self.result_banner)
 
-        # 6. 底部操作区
-        main_layout.addWidget(self._create_action_bar())
+        # 滚动内容添加到滚动区域
+        scroll_area.setWidget(scroll_content)
 
-        # 6. 弹性空间
-        main_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        # 主布局添加滚动区域
+        main_layout.addWidget(scroll_area, 1)  # stretch=1 占据剩余空间
+
+        # 6. 底部操作区（固定在底部）
+        self.action_bar = self._create_action_bar()
+        main_layout.addWidget(self.action_bar)
 
     def _create_file_section(self) -> QGroupBox:
         """创建文件加载区块"""
