@@ -68,17 +68,19 @@ logger = get_logger(__name__)
 # ============================================================
 # 界面尺寸常量
 # ============================================================
-WINDOW_WIDTH = 1100
-WINDOW_HEIGHT = 1500
-WINDOW_MIN_WIDTH = 1050
-WINDOW_MIN_HEIGHT = 980
-WINDOW_MAX_WIDTH = 1600
-WINDOW_MAX_HEIGHT = 1500
+# [FIX S1] 窗口尺寸修正：1000×750px
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 750
+WINDOW_MIN_WIDTH = 900
+WINDOW_MIN_HEIGHT = 700
+WINDOW_MAX_WIDTH = 1400
+WINDOW_MAX_HEIGHT = 1000
 WINDOW_TITLE = "客户名单数据预处理工具 v1.0.6"
 
 # ============================================================
 # 布局间距常量
 # ============================================================
+# [FIX M2] 区块间距修正：spacing 16→12
 MARGIN_MAIN = (20, 20, 20, 16)       # 主布局外边距 (上右下左)
 MARGIN_SECTION = (16, 30, 16, 16)   # 区块内边距（标题占用30px）
 MARGIN_SECTION_NARROW = (16, 25, 16, 16)  # 文件加载区块
@@ -86,28 +88,30 @@ MARGIN_ROW = (0, 0, 0, 0)           # 行Widget无边距
 MARGIN_BANNER = (16, 12, 16, 12)    # 结果横幅
 MARGIN_ACTION_BAR = (0, 10, 0, 0)   # 底部操作区
 
-SPACING_MAIN = 16                   # 区块之间间距
+SPACING_MAIN = 12                   # [FIX M2] 区块之间间距 16→12
 SPACING_ROW = 15                    # 行内间距（标签与输入框）
 SPACING_MODULE_ROW = 30             # 模块区块行内间距（复选框之间）
 SPACING_BANNER = 12                 # 横幅内部间距
-SPACING_CHECKBOX = 30               # 复选框之间间距
+SPACING_CHECKBOX = 48               # [FIX M4] 复选框之间间距 30→48
 
 # ============================================================
 # 高度常量
 # ============================================================
+# [FIX S2] 组件高度统一：36px
 HEIGHT_GROUP_FILE = 220             # 文件加载区块
-HEIGHT_GROUP_CONFIG = 150           # 处理配置区块
-HEIGHT_GROUP_MODULE = 220           # 执行模块区块
-HEIGHT_PROGRESS = 300              # 处理进度区块
+HEIGHT_GROUP_CONFIG = 130           # [FIX] 处理配置区块 150→130
+HEIGHT_GROUP_MODULE = 180           # [FIX] 执行模块区块 220→180
+HEIGHT_PROGRESS = 280              # [FIX] 处理进度区块 300→280
 HEIGHT_BANNER = 50                  # 结果横幅
-HEIGHT_LOG = 120                   # 日志区域
-HEIGHT_ROW_NORMAL = 50              # 普通行高度
-HEIGHT_ROW_MODULE = 44              # 模块行高度
-HEIGHT_ELEMENT = 40                 # 控件元素高度（输入框、按钮）
+HEIGHT_LOG = 100                   # [FIX] 日志区域 120→100
+HEIGHT_ROW_NORMAL = 40              # [FIX] 普通行高度 50→40
+HEIGHT_ROW_MODULE = 36              # [FIX M3] 模块行高度 44→36
+HEIGHT_ELEMENT = 36                 # [FIX S2] 控件元素高度 40→36
 HEIGHT_CHECKBOX = 36                # 复选框高度
 HEIGHT_BUTTON_BANNER = 32           # 横幅按钮高度
 HEIGHT_BUTTON_LARGE = 44            # 大按钮高度（开始处理）
 HEIGHT_CLOSE_BANNER = 24            # 关闭按钮尺寸
+LABEL_WIDTH = 110                   # [FIX M1] 标签宽度统一为110px
 
 
 class MainWindow(QMainWindow):
@@ -288,18 +292,14 @@ class MainWindow(QMainWindow):
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         group.setMinimumHeight(HEIGHT_GROUP_FILE)
 
-        layout = QGridLayout()
-        layout.setContentsMargins(*MARGIN_SECTION_NARROW)
-        layout.setSpacing(12)
-        
-        # [FIX] 设置列拉伸因子，防止缩小时控件重叠
-        # 列: 标签(0) | 输入框(1) | 输入框(2) | 按钮(3) | 信息(4) | 信息(5)
-        layout.setColumnStretch(0, 0)   # 标签列不拉伸
-        layout.setColumnStretch(1, 3)   # 输入框列拉伸
-        layout.setColumnStretch(2, 0)   # 空列不拉伸
-        layout.setColumnStretch(3, 0)   # 按钮列不拉伸
-        layout.setColumnStretch(4, 2)   # 信息列少量拉伸
-        layout.setColumnStretch(5, 0)   # 额外空间
+        # [FIX S3] 使用QVBoxLayout嵌套，每个文件占两行（输入框行+文件信息行）
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(*MARGIN_SECTION_NARROW)
+        main_layout.setSpacing(8)
+
+        self.file_inputs = {}
+        self.file_labels = {}
+        self.file_buttons = {}
 
         # 文件配置：key, 标签, 提示, 是否必填
         file_configs = [
@@ -310,61 +310,80 @@ class MainWindow(QMainWindow):
             ("spec", "字段规范", "config/field_spec.yaml", False),
         ]
 
-        self.file_inputs = {}
-        self.file_labels = {}
-        self.file_buttons = {}
+        for row_idx, (key, label_text, placeholder, required) in enumerate(file_configs):
+            # 每行一个文件输入区
+            row_widget = QWidget()
+            row_widget.setFixedHeight(36)  # 输入框行高度
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(12)
 
-        for row, (key, label_text, placeholder, required) in enumerate(file_configs):
             # 标签
             lbl = QLabel(label_text)
+            lbl.setFixedWidth(LABEL_WIDTH)  # [FIX M1] 统一标签宽度110px
             if required:
                 lbl.setText(f"{label_text} *")
                 lbl.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
             else:
                 lbl.setStyleSheet("font-size: 13px; color: #6B7280;")
-            layout.addWidget(lbl, row, 0, 1, 1)
+            row_layout.addWidget(lbl)
 
-            # 输入框 - [FIX] 设置最小宽度，防止被压缩
+            # 输入框
             le = QLineEdit()
             le.setPlaceholderText(placeholder)
-            le.setMinimumWidth(200)  # 输入框最小宽度
+            le.setMinimumHeight(HEIGHT_ELEMENT)
             if not required:
                 le.setDisabled(True)
             le.setObjectName(f"txt{key.capitalize()}")
-            layout.addWidget(le, row, 1, 1, 2)
-            self.file_inputs[key] = le
+            row_layout.addWidget(le, 1)
 
-            # 浏览/导入按钮 - [FIX] 设置最小宽度
+            # 浏览/导入按钮
             btn_text = "导入" if key == "spec" else "浏览"
             btn = QPushButton(btn_text)
             btn.setObjectName("btnBrowse")
-            btn.setMinimumWidth(70)  # 按钮最小宽度
-            btn.setMaximumWidth(90)
+            btn.setFixedSize(70, HEIGHT_ELEMENT)
             btn.clicked.connect(lambda checked, k=key: self._select_file(k))
-            layout.addWidget(btn, row, 3)
+            row_layout.addWidget(btn)
             self.file_buttons[key] = btn
 
-            # 文件信息标签 - [FIX] 设置最小宽度
+            main_layout.addWidget(row_widget)
+
+            # [FIX S3] 文件信息标签 - 移至输入框下方
+            info_widget = QWidget()
+            info_widget.setFixedHeight(20)  # 文件信息行高度
+            info_layout = QHBoxLayout(info_widget)
+            info_layout.setContentsMargins(LABEL_WIDTH, 0, 0, 0)  # 左对齐到标签
+            info_layout.setSpacing(0)
+
             info_lbl = QLabel()
             info_lbl.setObjectName("fileInfo")
-            info_lbl.setStyleSheet("font-size: 12px; color: #6B7280;")
-            info_lbl.setMinimumWidth(100)
-            layout.addWidget(info_lbl, row, 4, 1, 2)
+            info_lbl.setStyleSheet("font-size: 12px; color: #6B7280; padding-left: 12px;")
+            info_layout.addWidget(info_lbl)
             self.file_labels[key] = info_lbl
+
+            main_layout.addWidget(info_widget)
 
         # [20260420-老谈] ISSUE-14: 开始处理按钮初始应置灰（等待必填文件选择）
         # [20260420-老谈] ISSUE-13: 添加字典版本显示区域（加载字典后更新）
-        row = len(file_configs)
+        version_widget = QWidget()
+        version_widget.setFixedHeight(28)
+        version_layout = QHBoxLayout(version_widget)
+        version_layout.setContentsMargins(0, 0, 0, 0)
+        version_layout.setSpacing(12)
+
         lbl_version = QLabel("字典版本：")
+        lbl_version.setFixedWidth(LABEL_WIDTH)
         lbl_version.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
-        layout.addWidget(lbl_version, row, 0, 1, 1)
-        
+        version_layout.addWidget(lbl_version)
+
         self.lbl_dict_version = QLabel("（未加载）")
         self.lbl_dict_version.setObjectName("dictVersionLabel")
         self.lbl_dict_version.setStyleSheet("font-size: 13px; color: #6B7280;")
-        layout.addWidget(self.lbl_dict_version, row, 1, 1, 3)
+        version_layout.addWidget(self.lbl_dict_version, 1)
 
-        group.setLayout(layout)
+        main_layout.addWidget(version_widget)
+
+        group.setLayout(main_layout)
         return group
 
     def _create_config_section(self) -> QGroupBox:
@@ -389,7 +408,7 @@ class MainWindow(QMainWindow):
 
         lbl_dedup = QLabel("去重字段")
         lbl_dedup.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
-        lbl_dedup.setFixedWidth(75)
+        lbl_dedup.setFixedWidth(LABEL_WIDTH)  # [FIX M1] 标签宽度 75→110px
         lbl_dedup.setFixedHeight(HEIGHT_ELEMENT)
         lbl_dedup.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         row1_layout.addWidget(lbl_dedup)
@@ -430,7 +449,7 @@ class MainWindow(QMainWindow):
 
         lbl_output = QLabel("输出目录")
         lbl_output.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
-        lbl_output.setFixedWidth(75)
+        lbl_output.setFixedWidth(LABEL_WIDTH)  # [FIX M1] 标签宽度 75→110px
         lbl_output.setFixedHeight(HEIGHT_ELEMENT)
         lbl_output.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         row2_layout.addWidget(lbl_output)
@@ -622,7 +641,7 @@ class MainWindow(QMainWindow):
 
         cb5 = QCheckBox("名单内部重复检查")
         cb5.setChecked(True)
-        cb5.setFixedHeight(36)
+        cb5.setFixedHeight(HEIGHT_CHECKBOX)  # [FIX M3] 使用统一高度常量
         cb5.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         row3_layout.addWidget(cb5)
         self.checkboxes["internal_dedup"] = cb5
@@ -893,9 +912,20 @@ class MainWindow(QMainWindow):
         self.btn_history.clicked.connect(self._on_show_history)
         layout.addWidget(self.btn_history)
 
+        # 中间：开始处理按钮居中 [FIX S4]
         layout.addStretch()
 
-        # 右侧：取消按钮 + 版本按钮 + 开始按钮
+        self.btn_start = QPushButton("▶️ 开始处理")
+        self.btn_start.setObjectName("btnStart")
+        self.btn_start.setFixedWidth(200)  # 固定宽度200px
+        self.btn_start.setMinimumHeight(HEIGHT_BUTTON_LARGE)
+        self.btn_start.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
+        self.btn_start.clicked.connect(self._on_start_processing)
+        layout.addWidget(self.btn_start)
+
+        layout.addStretch()
+
+        # 右侧：取消按钮 + 版本按钮
         self.btn_cancel = QPushButton("取消")
         self.btn_cancel.setObjectName("btnCancel")
         self.btn_cancel.setMinimumWidth(80)
@@ -908,14 +938,6 @@ class MainWindow(QMainWindow):
         self.btn_version.setMinimumWidth(80)
         self.btn_version.clicked.connect(self._on_show_version)
         layout.addWidget(self.btn_version)
-
-        self.btn_start = QPushButton("▶️ 开始处理")
-        self.btn_start.setObjectName("btnStart")
-        self.btn_start.setMinimumWidth(140)
-        self.btn_start.setMinimumHeight(HEIGHT_BUTTON_LARGE)
-        self.btn_start.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
-        self.btn_start.clicked.connect(self._on_start_processing)
-        layout.addWidget(self.btn_start)
 
         return container
 
