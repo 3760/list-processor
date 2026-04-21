@@ -1305,6 +1305,16 @@ class MainWindow(QMainWindow):
                 self._animate_file_info_success(file_type)
                 self._log_message("INFO", f"已选择 [{file_type}]: {basename} ({file_info['rows']:,} 行){sheet_info}")
 
+        # 字典文件处理
+        elif file_type == "dict":
+            self._animate_file_info_updating(file_type)
+            # 检查MD5变更并显示版本信息
+            self._update_dict_version_label(file_path)
+            self._check_dict_file_change(file_path)
+            # 显示成功状态
+            self._animate_file_info_success(file_type)
+            self._log_message("INFO", f"已选择 [dict]: {basename}")
+
     def _animate_file_info_updating(self, file_type: str):
         """
         文件信息标签更新中动画（规范2.7）
@@ -1324,13 +1334,6 @@ class MainWindow(QMainWindow):
             label.setProperty("fileInfoState", "success")
             label.style().unpolish(label)
             label.style().polish(label)
-
-        # 如果是字典文件，检查MD5变更并显示版本信息
-        if file_type == "dict":
-            self._update_dict_version_label(file_path)
-            self._check_dict_file_change(file_path)
-
-        self._log_message("INFO", f"已选择 {file_type}: {basename}")
 
         # 更新开始按钮状态
         self._update_start_button_state()
