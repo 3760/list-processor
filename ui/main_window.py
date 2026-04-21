@@ -248,6 +248,7 @@ class MainWindow(QMainWindow):
         scroll_area.setFrameShape(QScrollArea.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("background-color: #F3F4F6;")
 
         # 滚动内容容器
         scroll_content = QWidget()
@@ -293,7 +294,7 @@ class MainWindow(QMainWindow):
         # [原型还原] 双行布局：第一行（标签+输入框+按钮）、第二行（文件信息）
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(*MARGIN_SECTION_NARROW)
-        main_layout.setSpacing(8)
+        main_layout.setSpacing(12)
 
         self.file_inputs = {}
         self.file_labels = {}
@@ -333,9 +334,9 @@ class MainWindow(QMainWindow):
             input_layout.addWidget(le, 1)
             self.file_inputs[key] = le
 
-            # 浏览/导入按钮
+            # 浏览/导入按钮（统一尺寸 80x36）
             btn = QPushButton("导入" if key == "spec" else "浏览")
-            btn.setFixedSize(60, HEIGHT_ELEMENT)
+            btn.setFixedSize(80, HEIGHT_ELEMENT)
             btn.clicked.connect(lambda checked, k=key: self._select_file(k))
             input_layout.addWidget(btn)
             self.file_buttons[key] = btn
