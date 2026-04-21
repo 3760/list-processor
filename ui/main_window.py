@@ -289,7 +289,6 @@ class MainWindow(QMainWindow):
         group = QGroupBox()
         group.setTitle("📁 文件加载")
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        group.setMinimumHeight(HEIGHT_GROUP_FILE)
 
         # [原型还原] 双行布局：第一行（标签+输入框+按钮）、第二行（文件信息）
         main_layout = QVBoxLayout()
@@ -310,9 +309,8 @@ class MainWindow(QMainWindow):
         ]
 
         for key, label_text, placeholder, required in file_configs:
-            # 第一行：标签 + 输入框 + 按钮
+            # 第一行：标签 + 输入框 + 按钮（自适应高度）
             input_row = QWidget()
-            input_row.setFixedHeight(36)
             input_layout = QHBoxLayout(input_row)
             input_layout.setContentsMargins(0, 0, 0, 0)
             input_layout.setSpacing(8)
@@ -329,7 +327,7 @@ class MainWindow(QMainWindow):
             # 输入框
             le = QLineEdit()
             le.setPlaceholderText(placeholder)
-            le.setMinimumHeight(HEIGHT_ELEMENT)
+            le.setFixedHeight(HEIGHT_ELEMENT)
             if not required:
                 le.setDisabled(True)
             input_layout.addWidget(le, 1)
