@@ -16,22 +16,17 @@ from typing import Optional
 
 import polars as pl
 
-from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QParallelAnimationGroup
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtWidgets import (
     QAction,
-    QApplication,
     QCheckBox,
     QFileDialog,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
-    QMenuBar,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
@@ -42,16 +37,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.context import ProcessContext
-from core.orchestrator import ProcessOrchestrator
-from infra.exceptions import CriticalError
 from infra.log_manager import get_logger
-from modules.f1_loader import FileLoaderModule
-from modules.f2_field_validator import FieldValidatorModule
-from modules.f3_priority_dedup import PriorityDedupModule
-from modules.f4_dict_encoder import DictEncoderModule
-from modules.f5_dict_validator import DictValidatorModule
-from modules.f6_internal_dedup import InternalDedupModule
-from modules.f7_output_exporter import OutputExporterModule
 from ui.widgets.error_dialog import show_critical_error
 from ui.widgets.history_dialog import HistoryDialog
 from ui.widgets.result_viewer import ResultViewerDialog
@@ -195,9 +181,6 @@ class MainWindow(QMainWindow):
     def _is_dark_mode(self) -> bool:
         """检测 macOS 深色模式"""
         try:
-            from PyQt5.QtWidgets import QApplication
-            # macOS: 通过 NSApp.userInterfaceLayoutDirection 检测
-            # 或者通过系统外观设置
             import subprocess
             result = subprocess.run(
                 ["defaults", "read", "-g", "AppleInterfaceStyle"],
@@ -271,19 +254,6 @@ class MainWindow(QMainWindow):
 
         # 6. 弹性空间
         main_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding))
-
-    def _create_section_title(self, title: str, parent: QWidget = None) -> QLabel:
-        """创建区块标题（带 emoji）"""
-        label = QLabel(title)
-        label.setStyleSheet("""
-            QLabel {
-                font-size: 14px;
-                font-weight: 600;
-                color: #111827;
-                padding-bottom: 8px;
-            }
-        """)
-        return label
 
     def _create_file_section(self) -> QGroupBox:
         """创建文件加载区块"""
@@ -538,7 +508,7 @@ class MainWindow(QMainWindow):
             ('uid', '用户ID'),
         ]
         
-        for pattern, name in priority_patterns:
+        for pattern, _ in priority_patterns:
             for i, col in enumerate(col_lower):
                 if pattern in col:
                     return columns[i]
@@ -1148,7 +1118,7 @@ class MainWindow(QMainWindow):
         try:
             subprocess.run(["open", help_path], check=True)
             self._log_message("INFO", "已打开帮助文档")
-        except Exception as e:
+        except Exception:
             QMessageBox.information(
                 self,
                 "帮助",
@@ -1216,7 +1186,6 @@ class MainWindow(QMainWindow):
         - Space: 勾选/取消复选框（当复选框聚焦时）
         """
         key = event.key()
-        modifiers = event.modifiers()
         
         # [规范四] Enter: 确认操作
         if key == Qt.Key_Return or key == Qt.Key_Enter:
@@ -1505,13 +1474,12 @@ class MainWindow(QMainWindow):
         获取文件基本信息（列数、行数）
         使用 Polars 快速读取，避免加载整个文件
         """
-        import os
         result = {"cols": 0, "rows": 0}
         
         try:
             if str(file_path).lower().endswith('.csv'):
-                # CSV 文件使用 Polars
-                df = pl.scan_csv(file_path).fetch(1000)  # 只读前1000行获取列信息
+                # CSV 文件使用 Polars（fetch 已弃用，改用 head）
+                df = pl.scan_csv(file_path).head(1000).collect()
                 result["cols"] = len(df.columns)
                 # 统计总行数需要完整扫描，这里使用估算
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -1648,7 +1616,7 @@ class MainWindow(QMainWindow):
         context.output_path = output_dir
 
         # 构建模块列表
-        modules = self._build_modules(selected_modules, context)
+        modules = self._build_modules(selected_modules)
 
         # 创建工作线程
         self.worker = ProcessingWorker(
@@ -1662,7 +1630,7 @@ class MainWindow(QMainWindow):
         # 启动处理线程
         self.worker.start()
 
-    def _build_modules(self, selected_modules: list, context: ProcessContext):
+    def _build_modules(self, selected_modules: list):
         """
         [FIX v1.0.6] Bug 4: 重构模块执行顺序
 
@@ -1783,8 +1751,6 @@ class MainWindow(QMainWindow):
 
     def _on_view_result(self):
         """查看结果"""
-        from PyQt5.QtWidgets import QFileDialog
-        
         # 获取最新的输出文件
         output_dir = self.txt_output.text().strip()
         if not output_dir:
