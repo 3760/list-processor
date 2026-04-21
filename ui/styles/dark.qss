@@ -332,21 +332,20 @@ QLabel#labelRequired::after {
 QLabel#fileInfo {
     font-size: 12px;
     color: #9CA3AF;
-    transition: opacity 300ms ease, color 300ms ease;
+    /* Note: PyQt5 QSS 不支持 CSS transition，使用 Python 端动画 */
 }
 
-QLabel#fileInfo.updating {
-    opacity: 0.5;
+/* 使用 Qt 属性选择器语法 */
+QLabel#fileInfo[fileInfoState="updating"] {
+    color: #6B7280;
 }
 
-QLabel#fileInfo.success {
+QLabel#fileInfo[fileInfoState="success"] {
     color: #34D399;
-    opacity: 1;
 }
 
-QLabel#fileInfo.error {
+QLabel#fileInfo[fileInfoState="error"] {
     color: #F87171;
-    opacity: 1;
 }
 
 /* ==================== 结果横幅 ==================== */

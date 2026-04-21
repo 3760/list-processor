@@ -829,26 +829,34 @@ class MainWindow(QMainWindow):
         """
         # 确保组件可见
         self.result_banner.setVisible(True)
-        
+
+        # 清理旧动画实例，防止内存泄漏
+        if hasattr(self, '_banner_slide_animation') and self._banner_slide_animation:
+            self._banner_slide_animation.stop()
+            self._banner_slide_animation.deleteLater()
+        if hasattr(self, '_banner_fade_animation') and self._banner_fade_animation:
+            self._banner_fade_animation.stop()
+            self._banner_fade_animation.deleteLater()
+
         # 获取当前几何信息
         current_geometry = self.result_banner.geometry()
-        
+
         # 创建位置动画：从上方20px滑入
         self._banner_slide_animation = QPropertyAnimation(self.result_banner, b"geometry")
         self._banner_slide_animation.setDuration(400)
         self._banner_slide_animation.setEasingCurve(QEasingCurve.OutBack)
-        
+
         # 起始位置：向上偏移20px
         start_geometry = current_geometry
         start_geometry.moveTop(current_geometry.top() - 20)
         self._banner_slide_animation.setStartValue(start_geometry)
         self._banner_slide_animation.setEndValue(current_geometry)
-        
+
         self._banner_slide_animation.start()
-        
+
         # 同时执行淡入动画
         self._animate_result_banner_fade_in()
-        
+
         logger.info("结果横幅滑入动画已触发")
 
     def _animate_result_banner_fade_in(self):
@@ -1314,6 +1322,13 @@ class MainWindow(QMainWindow):
             # 显示成功状态
             self._animate_file_info_success(file_type)
             self._log_message("INFO", f"已选择 [dict]: {basename}")
+
+        # 字段规范文件处理
+        elif file_type == "spec":
+            self._animate_file_info_updating(file_type)
+            self.file_labels[file_type].setText("✅ 字段规范已加载")
+            self._animate_file_info_success(file_type)
+            self._log_message("INFO", f"已加载字段规范: {basename}")
 
     def _animate_file_info_updating(self, file_type: str):
         """
