@@ -1,0 +1,61 @@
+# 字段规范配置文件
+# 本文件由「属性导入模版」Excel 转换生成，乙方技术负责人维护
+# 用户可通过工具界面的「导入字段规范」功能更新此文件
+
+# 配置版本
+version: "1.0"
+
+# 最后更新时间（ISO 8601 格式）
+updated_at: "2026-04-17T00:00:00"
+
+# 字段规范列表
+fields:
+  - attr_name: "客户来源"                    # 属性中文名称
+    attr_code: "客户来源"                     # 属性 code（对应 Excel 列名，唯一标识）
+    data_type: "枚举"                        # 数据类型：字符串/整数/小数/日期/枚举
+    data_subtype: "单选项"                    # 数据子类型
+    length_max: 20                           # 最大长度（null 表示不限制）
+    decimal_digits: null                     # 小数位数（仅小数类型需要）
+    dict_id: "A1"                            # 字典类型标识（对应 data_dict.xlsx 第0行的标识值）
+    required: true                           # 是否必填
+    validation: null                         # 正则表达式（null 表示不验证）
+
+  - attr_name: "邮箱"
+    attr_code: "邮箱"
+    data_type: "字符串"
+    data_subtype: "邮箱"
+    length_max: 100
+    decimal_digits: null
+    dict_id: null                            # 非字典类型字段
+    required: true
+    validation: '^[\w.-]+@[\w.-]+\.\w+$'    # 邮箱格式正则
+
+  - attr_name: "手机号"
+    attr_code: "手机"
+    data_type: "字符串"
+    data_subtype: "手机号"
+    length_max: 20
+    decimal_digits: null
+    dict_id: null
+    required: false
+    validation: "^1[3-9]\\d{9}$"              # 手机号格式正则
+
+  - attr_name: "姓名"
+    attr_code: "姓名"
+    data_type: "字符串"
+    data_subtype: "输入框"
+    length_max: 50
+    decimal_digits: null
+    dict_id: null
+    required: true
+    validation: null
+
+  - attr_name: "客户等级"
+    attr_code: "客户等级"
+    data_type: "枚举"
+    data_subtype: "下拉单选"
+    length_max: 10
+    decimal_digits: null
+    dict_id: "A2"                            # 引用字典 A2
+    required: false
+    validation: null

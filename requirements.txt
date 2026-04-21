@@ -1,0 +1,20 @@
+# 客户名单数据预处理单机工具 - 依赖清单
+# Python >= 3.10
+
+# 数据处理
+polars>=1.0.0
+openpyxl>=3.1.0
+fastexcel>=0.19.0
+
+# GUI
+PyQt5>=5.15.0
+
+# 配置与序列化
+PyYAML>=6.0
+
+# 测试
+pytest>=7.0.0
+pytest-qt>=4.5.0
+
+# 打包（仅在打包阶段需要）
+pyinstaller>=6.0.0

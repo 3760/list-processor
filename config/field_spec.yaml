@@ -1,0 +1,30 @@
+version: '1.0'
+source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/业务验收/测试数据/field_spec_验收.xlsx
+fields:
+  姓名:
+    attr_code: 姓名
+    required: true
+    type: 文本型
+    sub_type: 输入框
+  邮箱:
+    attr_code: 邮箱
+    required: true
+    type: 文本型
+    sub_type: 输入框
+  手机:
+    attr_code: 手机
+    required: false
+    type: 文本型
+    sub_type: 输入框
+  客户来源:
+    attr_code: 客户来源
+    required: true
+    type: 文本型
+    sub_type: 单选项
+    dict_id: A2
+  客户等级:
+    attr_code: 客户等级
+    required: false
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: A1

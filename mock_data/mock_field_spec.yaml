@@ -1,0 +1,62 @@
+# Mock 字段规范（开发测试用）
+# 对应字段见 PRD §8.1
+
+version: "1.0"
+source: mock_data/mock_field_spec.yaml
+
+fields:
+  手机号:
+    attr_code: phone
+    required: true
+    data_type: string
+    max_length: 20
+
+  姓名:
+    attr_code: name
+    required: true
+    data_type: string
+    max_length: 50
+
+  省份:
+    attr_code: province
+    required: false
+    data_type: string
+    enum_values:
+      - 北京市
+      - 上海市
+      - 广东省
+      - 浙江省
+      - 江苏省
+
+  城市:
+    attr_code: city
+    required: false
+    data_type: string
+    max_length: 30
+
+  年龄段:
+    attr_code: age_group
+    required: false
+    data_type: string
+    enum_values:
+      - 18-25
+      - 26-35
+      - 36-45
+      - 46-55
+      - 56-65
+      - 65以上
+
+  客户类型:
+    attr_code: customer_type
+    required: true
+    data_type: string
+    enum_values:
+      - 一线
+      - 三方
+      - HW
+
+  录入日期:
+    attr_code: input_date
+    required: false
+    data_type: string
+    max_length: 10

@@ -1,0 +1,165 @@
+"""
+核心层 - 流程编排器
+
+ProcessOrchestrator 负责控制整体处理流程的执行顺序、
+异常捕获、进度回调、事务回滚等核心协调工作。
+
+执行顺序（PRD §6）：
+F1 → F2 → F6 → F4 → F5 → F3 → F7
+"""
+
+import time
+from typing import Any, Callable, Dict, List, Optional
+
+from core.base_module import BaseModule
+from core.context import ProcessContext
+from infra.exceptions import CriticalError, ProcessingError
+from infra.log_manager import get_logger
+from db.dao.processing_history import ProcessingHistoryDAO
+
+logger = get_logger(__name__)
+
+
+class ProcessOrchestrator:
+    """
+    处理流程编排器
+
+    Attributes
+    ----------
+    modules : List[BaseModule]
+        按执行顺序排列的业务模块列表
+    progress_callback : Callable[[str, int], None], optional
+        进度回调函数，签名：(module_name, percent)
+    """
+
+    def __init__(
+        self,
+        modules: List[BaseModule],
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+    ):
+        if not modules:
+            raise ValueError("模块列表不能为空")
+
+        self.modules = modules
+        self.progress_callback = progress_callback
+        self._total_weight = sum(m.get_progress_weight() for m in modules)
+
+    def run(self, context: ProcessContext) -> ProcessContext:
+        """
+        执行完整处理流程。
+
+        Parameters
+        ----------
+        context : ProcessContext
+            处理上下文（包含输入文件等）
+
+        Returns
+        -------
+        ProcessContext
+            处理完成后的上下文
+        """
+        run_id = ProcessingHistoryDAO.create_run(
+            input_yixian=context.get_input_file("yixian"),
+            input_sanfang=context.get_input_file("sanfang"),
+            input_hw=context.get_input_file("hw"),
+            dict_file=context.dict_file_path,
+            spec_file=context.spec_file_path,
+        )
+        context.run_id = run_id
+        logger.info(f"流程启动 run_id={run_id}")
+
+        completed_weight = 0
+
+        try:
+            for module in self.modules:
+                module_name = module.get_module_name()
+                logger.info(f"========== 开始模块 {module_name} ==========")
+
+                # 1. 前置校验
+                valid, err_msg = module.validate_input(context)
+                if not valid:
+                    logger.warning(f"模块 {module_name} 前置校验未通过: {err_msg}")
+                    context.record_module_result(
+                        module_name,
+                        success_count=0,
+                        fail_count=0,
+                        skip_count=0,
+                        message=f"前置校验未通过: {err_msg}",
+                    )
+                    self._report_progress(module_name, completed_weight)
+                    continue
+
+                # 2. 计时执行
+                start_time = time.time()
+                try:
+                    context = module.execute(context)
+                except Exception as e:
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    logger.error(
+                        f"模块 {module_name} 执行异常: {e}",
+                        exc_info=True,
+                    )
+                    context.record_module_result(
+                        module_name,
+                        success_count=0,
+                        fail_count=0,
+                        skip_count=0,
+                        message=f"执行异常: {e}",
+                    )
+                    module.on_error(context, e)
+
+                    # 关键模块失败 → 整体失败
+                    if isinstance(e, CriticalError):
+                        raise
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                logger.info(
+                    f"========== 完成模块 {module_name}，耗时 {elapsed_ms}ms =========="
+                )
+
+                # 3. 更新进度
+                completed_weight += module.get_progress_weight()
+                self._report_progress(module_name, completed_weight)
+
+            # 4. 全流程完成
+            context.status = "completed"
+            summary = context.build_summary()
+            ProcessingHistoryDAO.complete_run(
+                run_id=run_id,
+                status="completed",
+                total_records=summary.get("total_input_records", 0),
+                output_records=summary.get("total_output_records", 0),
+                error_records=summary.get("total_error_records", 0),
+                summary=summary,
+            )
+            logger.info(f"流程完成 run_id={run_id}")
+
+        except CriticalError as e:
+            context.status = "failed"
+            context.build_summary()
+            ProcessingHistoryDAO.complete_run(
+                run_id=run_id,
+                status="failed",
+                summary=context.summary,
+            )
+            logger.critical(f"流程关键错误 run_id={run_id}: {e}")
+            raise
+
+        except Exception as e:
+            context.status = "failed"
+            context.build_summary()
+            ProcessingHistoryDAO.complete_run(
+                run_id=run_id,
+                status="failed",
+                summary=context.summary,
+            )
+            logger.error(f"流程未预期错误 run_id={run_id}: {e}", exc_info=True)
+            raise ProcessingError(f"流程执行失败: {e}", module="Orchestrator") from e
+
+        return context
+
+    def _report_progress(self, module_name: str, completed_weight: int):
+        """向回调函数报告进度"""
+        if self.progress_callback:
+            percent = min(int(completed_weight / self._total_weight * 100), 99)
+            self.progress_callback(module_name, percent)

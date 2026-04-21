@@ -1,0 +1,369 @@
+"""
+UI层 - 进度展示组件
+
+实时展示处理进度，包含：
+- 进度条（百分比显示）
+- 当前阶段提示
+- 预估剩余时间（可选）
+- 各模块完成状态列表
+
+使用方式：
+    from ui.widgets.progress_panel import ProgressPanel
+
+    panel = ProgressPanel()
+    layout.addWidget(panel)
+
+    # 连接信号
+    panel.on_progress("F1", 50)  # 更新进度
+"""
+
+from typing import Dict, Optional
+
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from infra.log_manager import get_logger
+
+logger = get_logger(__name__)
+
+
+class ProgressPanel(QWidget):
+    """
+    进度展示面板。
+
+    Features:
+    - 总体进度条
+    - 当前模块提示
+    - 各模块完成状态
+    - 预估剩余时间
+
+    Signals:
+        cancelled(): 用户点击取消时发出
+    """
+
+    cancelled = pyqtSignal()
+
+    # 模块名称映射（中文显示）
+    MODULE_NAMES = {
+        "F1": "文件加载",
+        "F2": "字段合规检查",
+        "F3": "跨名单去重",
+        "F4": "数据字典上码",
+        "F5": "字典值校验",
+        "F6": "名单内部去重",
+        "F7": "结果输出",
+        "完成": "处理完成",
+    }
+
+    # 模块进度权重（总计100%）
+    MODULE_WEIGHTS = {
+        "F1": 15,
+        "F2": 20,
+        "F3": 15,
+        "F4": 20,
+        "F5": 10,
+        "F6": 10,
+        "F7": 10,
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_module: Optional[str] = None
+        self.module_progress: Dict[str, int] = {}
+        self.start_time: Optional[float] = None
+        self._timer: Optional[QTimer] = None
+
+        self._init_ui()
+
+    def _init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        # 总体进度区
+        progress_layout = QHBoxLayout()
+
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setMinimumHeight(30)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #e0e0e0;
+                border-radius: 5px;
+                text-align: center;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 4px;
+            }
+        """)
+        progress_layout.addWidget(self.progress_bar)
+
+        # 百分比标签
+        self.percent_label = QLabel("0%")
+        self.percent_label.setMinimumWidth(50)
+        self.percent_label.setAlignment(Qt.AlignCenter)
+        self.percent_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        progress_layout.addWidget(self.percent_label)
+
+        layout.addLayout(progress_layout)
+
+        # 当前阶段标签
+        self.stage_label = QLabel("等待开始...")
+        self.stage_label.setAlignment(Qt.AlignCenter)
+        self.stage_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 13px;
+                padding: 5px;
+                background-color: #f5f5f5;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.stage_label)
+
+        # 模块状态列表
+        self.module_status_frame = QFrame()
+        self.module_status_frame.setFrameShape(QFrame.StyledPanel)
+        self.module_status_frame.setFrameShadow(QFrame.Raised)
+        self.module_status_frame.setMaximumHeight(200)
+        self.module_status_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.module_status_frame.setStyleSheet("""
+            QFrame {
+                background-color: #fafafa;
+                border: 1px solid #e0e0e0;
+                border-radius: 3px;
+            }
+        """)
+        module_layout = QVBoxLayout(self.module_status_frame)
+        module_layout.setContentsMargins(10, 10, 10, 10)
+        module_layout.setSpacing(5)
+
+        self.module_labels: Dict[str, QLabel] = {}
+        for module in ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
+            module_row = QHBoxLayout()
+            module_row.setSpacing(10)
+
+            # 模块名称
+            name_label = QLabel(self.MODULE_NAMES.get(module, module))
+            name_label.setMinimumWidth(120)
+            name_row_layout = QHBoxLayout()
+            name_row_layout.addWidget(name_label)
+            name_row_layout.addStretch()
+            module_row.addLayout(name_row_layout)
+
+            # 状态指示
+            status_label = QLabel("⏳")
+            status_label.setMinimumWidth(30)
+            module_row.addWidget(status_label)
+            self.module_labels[module] = status_label
+
+            # 进度指示
+            progress_label = QLabel("")
+            progress_label.setMinimumWidth(60)
+            module_row.addWidget(progress_label)
+            self.module_labels[f"{module}_progress"] = progress_label
+
+            module_layout.addLayout(module_row)
+
+        layout.addWidget(self.module_status_frame)
+
+        # 预估剩余时间
+        self.eta_label = QLabel("")
+        self.eta_label.setAlignment(Qt.AlignRight)
+        self.eta_label.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self.eta_label)
+
+    def start(self):
+        """开始进度跟踪"""
+        import time
+        self.start_time = time.time()
+        self.module_progress = {}
+        self._reset_ui()
+        self._start_timer()
+
+    def _reset_ui(self):
+        """重置UI状态"""
+        self.progress_bar.setValue(0)
+        self.percent_label.setText("0%")
+        self.stage_label.setText("准备中...")
+
+        for module in ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
+            self.module_labels[module].setText("⏳")
+            self.module_labels[f"{module}_progress"].setText("")
+
+    def _start_timer(self):
+        """启动定时器更新预估时间"""
+        if self._timer is None:
+            self._timer = QTimer(self)
+            self._timer.timeout.connect(self._update_eta)
+            self._timer.start(1000)  # 每秒更新
+
+    def _update_eta(self):
+        """更新预估剩余时间"""
+        if self.start_time is None:
+            return
+
+        import time
+        elapsed = time.time() - self.start_time
+        current_percent = self.progress_bar.value()
+
+        if current_percent > 0:
+            # 根据当前进度估算剩余时间
+            total_estimated = elapsed / (current_percent / 100)
+            remaining = total_estimated - elapsed
+
+            if remaining > 60:
+                self.eta_label.setText(f"预估剩余: {int(remaining / 60)}分{int(remaining % 60)}秒")
+            elif remaining > 0:
+                self.eta_label.setText(f"预估剩余: {int(remaining)}秒")
+            else:
+                self.eta_label.setText("处理中...")
+        else:
+            self.eta_label.setText("处理中...")
+
+    def on_progress(self, module: str, percent: int):
+        """
+        处理进度更新回调。
+
+        Parameters
+        ----------
+        module : str
+            模块名称（F1~F7）
+        percent : int
+            模块内部进度（0~100）
+        """
+        self.current_module = module
+        self.module_progress[module] = percent
+
+        # 更新阶段提示
+        module_name = self.MODULE_NAMES.get(module, module)
+        self.stage_label.setText(f"正在处理: {module_name} ({percent}%)")
+
+        # 更新模块状态
+        if module in self.module_labels:
+            if percent == 100:
+                self.module_labels[module].setText("✅")
+                self.module_labels[module].setStyleSheet("color: green; font-weight: bold;")
+            else:
+                self.module_labels[module].setText("🔄")
+            self.module_labels[f"{module}_progress"].setText(f"{percent}%")
+
+        # 更新总体进度
+        self._update_total_progress()
+
+    def _update_total_progress(self):
+        """根据各模块进度计算总体进度"""
+        total = 0
+        for module, weight in self.MODULE_WEIGHTS.items():
+            module_pct = self.module_progress.get(module, 0)
+            total += (module_pct / 100) * weight
+
+        self.progress_bar.setValue(int(total))
+        self.percent_label.setText(f"{int(total)}%")
+
+    def on_complete(self, success: bool = True):
+        """
+        处理完成。
+
+        Parameters
+        ----------
+        success : bool
+            是否成功完成
+        """
+        if self._timer:
+            self._timer.stop()
+
+        if success:
+            self.progress_bar.setValue(100)
+            self.percent_label.setText("100%")
+            self.stage_label.setText("✅ 处理完成")
+            self.stage_label.setStyleSheet("""
+                QLabel {
+                    color: #4CAF50;
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 5px;
+                    background-color: #e8f5e9;
+                    border-radius: 3px;
+                }
+            """)
+            self.eta_label.setText("")
+
+            # 所有模块标记完成
+            for module in ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
+                self.module_labels[module].setText("✅")
+                self.module_labels[module].setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.stage_label.setText("❌ 处理失败")
+            self.stage_label.setStyleSheet("""
+                QLabel {
+                    color: #f44336;
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 5px;
+                    background-color: #ffebee;
+                    border-radius: 3px;
+                }
+            """)
+
+        logger.info(f"进度面板更新完成: success={success}")
+
+    def on_error(self, error_message: str):
+        """
+        处理出错。
+
+        Parameters
+        ----------
+        error_message : str
+            错误消息
+        """
+        if self._timer:
+            self._timer.stop()
+
+        self.stage_label.setText(f"❌ 错误: {error_message[:30]}...")
+        self.stage_label.setStyleSheet("""
+            QLabel {
+                color: #f44336;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 5px;
+                background-color: #ffebee;
+                border-radius: 3px;
+            }
+        """)
+        self.eta_label.setText("")
+
+    def reset(self):
+        """重置面板状态"""
+        if self._timer:
+            self._timer.stop()
+
+        self.current_module = None
+        self.module_progress = {}
+        self.start_time = None
+        self._reset_ui()
+        self.stage_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 13px;
+                padding: 5px;
+                background-color: #f5f5f5;
+                border-radius: 3px;
+            }
+        """)
+        self.eta_label.setText("")

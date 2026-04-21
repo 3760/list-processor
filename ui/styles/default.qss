@@ -1,0 +1,424 @@
+/*
+客户名单数据预处理工具 - UI 样式表
+基于 UI设计规范-v1.0-20260417
+
+色彩系统：
+- Primary: #2563EB
+- Success: #10B981
+- Warning: #F59E0B
+- Error: #EF4444
+- Text Primary: #111827
+- Text Secondary: #6B7280
+- Border: #E5E7EB
+- Background: #F9FAFB
+- Surface: #FFFFFF
+*/
+
+/* [20260420-老谈] 修复 macOS 字体警告 - Qt 只识别特定字体名称 */
+* {
+    font-family: "PingFang SC", "Helvetica Neue", "Helvetica", "Arial";
+    font-size: 13px;
+    color: #111827;
+}
+
+/* ==================== 主窗口 ==================== */
+
+QMainWindow {
+    background-color: #F9FAFB;
+}
+
+/* ==================== 分组区块 ==================== */
+
+QGroupBox {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 16px;
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 8px;
+    color: #374151;
+}
+
+/* ==================== 输入框 ==================== */
+
+QLineEdit {
+    height: 36px;
+    padding: 10px 12px;
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    font-size: 13px;
+    color: #111827;
+}
+
+QLineEdit:focus {
+    border-color: #2563EB;
+    outline: none;
+}
+
+QLineEdit:disabled {
+    background-color: #F3F4F6;
+    color: #9CA3AF;
+}
+
+/* ==================== 按钮 ==================== */
+
+/* 主按钮 - 开始处理 */
+/* P2-10：移除 box-shadow，使用 Qt 兼容的 border 模拟阴影效果 */
+QPushButton#btnPrimary {
+    background-color: #2563EB;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 44px;
+    min-width: 200px;
+    padding: 0 24px;
+}
+
+QPushButton#btnPrimary:hover {
+    background-color: #1D4ED8;
+}
+
+QPushButton#btnPrimary:pressed {
+    background-color: #1E40AF;
+}
+
+QPushButton#btnPrimary:disabled {
+    background-color: #E5E7EB;
+    color: #9CA3AF;
+}
+
+/* 次要按钮 - 取消 */
+QPushButton#btnSecondary {
+    background-color: #FFFFFF;
+    color: #374151;
+    border: 1px solid #D1D5DB;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 36px;
+    padding: 0 16px;
+}
+
+QPushButton#btnSecondary:hover {
+    background-color: #F9FAFB;
+    border-color: #9CA3AF;
+}
+
+QPushButton#btnSecondary:disabled {
+    background-color: #F3F4F6;
+    color: #9CA3AF;
+    border-color: #E5E7EB;
+}
+
+/* 通用按钮样式 */
+QPushButton {
+    background-color: #FFFFFF;
+    color: #374151;
+    border: 1px solid #D1D5DB;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 36px;
+    padding: 0 16px;
+}
+
+QPushButton:hover {
+    background-color: #F9FAFB;
+    border-color: #9CA3AF;
+}
+
+QPushButton:disabled {
+    background-color: #F3F4F6;
+    color: #9CA3AF;
+    border-color: #E5E7EB;
+}
+
+/* 浏览按钮 */
+QPushButton#btnBrowse {
+    min-width: 80px;
+    min-height: 36px;
+}
+
+/* ==================== 下拉框 ==================== */
+
+QComboBox {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    font-size: 13px;
+}
+
+QComboBox:focus {
+    border-color: #2563EB;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+    padding-right: 8px;
+}
+
+QComboBox QAbstractItemView {
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    selection-background-color: #DBEAFE;
+    selection-color: #2563EB;
+}
+
+/* ==================== 复选框 ==================== */
+
+QCheckBox {
+    font-size: 13px;
+    color: #374151;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid #D1D5DB;
+    background-color: #FFFFFF;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #2563EB;
+    border-color: #2563EB;
+}
+
+QCheckBox::indicator:disabled {
+    opacity: 0.5;
+}
+
+/* ==================== 进度条 ==================== */
+
+QProgressBar {
+    height: 8px;
+    border-radius: 4px;
+    background-color: #E5E7EB;
+    text-align: center;
+    font-size: 12px;
+    color: #6B7280;
+}
+
+QProgressBar::chunk {
+    background-color: #2563EB;
+    border-radius: 4px;
+}
+
+/* ==================== 日志区域 ==================== */
+
+QTextEdit#logArea {
+    background-color: #F9FAFB;
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 12px;
+    color: #4B5563;
+}
+
+/* ==================== 标签 ==================== */
+
+QLabel#labelPrimary {
+    font-size: 13px;
+    font-weight: 500;
+    color: #111827;
+}
+
+QLabel#labelSecondary {
+    font-size: 12px;
+    color: #6B7280;
+}
+
+QLabel#labelRequired::after {
+    content: " *";
+    color: #EF4444;
+}
+
+/* 文件信息标签 */
+QLabel#fileInfo {
+    font-size: 12px;
+    color: #6B7280;
+}
+
+/* ==================== 结果横幅 ==================== */
+
+/* 成功状态 */
+QFrame#resultBannerSuccess {
+    background-color: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+/* 警告状态 */
+QFrame#resultBannerWarning {
+    background-color: #FFFBEB;
+    border: 1px solid #FCD34D;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+/* 错误状态 */
+QFrame#resultBannerError {
+    background-color: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+/* ==================== 滚动条 ==================== */
+
+QScrollBar:vertical {
+    background-color: transparent;
+    width: 10px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #D1D5DB;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #9CA3AF;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background-color: transparent;
+    height: 10px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #D1D5DB;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #9CA3AF;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+/* ==================== 状态栏 ==================== */
+
+QStatusBar {
+    background-color: #F9FAFB;
+    border-top: 1px solid #E5E7EB;
+    color: #6B7280;
+    font-size: 12px;
+}
+
+/* ==================== 对话框 ==================== */
+
+QDialog {
+    background-color: #F9FAFB;
+}
+
+/* ==================== 版本记录对话框 ==================== */
+
+/* 版本标签 */
+#versionLabel {
+    font-size: 13px;
+    color: #6B7280;
+    padding: 4px 12px;
+    background-color: #E5E7EB;
+    border-radius: 12px;
+}
+
+/* 版本卡片 */
+#versionCard {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+}
+
+/* 版本标题 */
+#versionTitle {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+}
+
+/* 版本日期 */
+#versionDate {
+    font-size: 12px;
+    color: #6B7280;
+}
+
+/* 版本作者 */
+#versionAuthor {
+    font-size: 12px;
+    color: #6B7280;
+}
+
+/* 版本分割线 */
+#versionLine {
+    background-color: #E5E7EB;
+}
+
+/* 版本区域标题 */
+#sectionTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+}
+
+#sectionBug {
+    font-size: 13px;
+    font-weight: 600;
+    color: #DC2626;
+}
+
+#sectionFeature {
+    font-size: 13px;
+    font-weight: 600;
+    color: #059669;
+}
+
+/* 版本内容项 */
+#sectionItem {
+    font-size: 12px;
+    color: #4B5563;
+    padding-left: 8px;
+}
+
+/* 版本滚动区域 */
+#versionScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+#versionScrollArea > QWidget > QScrollBar {
+    background-color: transparent;
+}
