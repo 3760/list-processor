@@ -16,7 +16,7 @@ from typing import Optional
 
 import polars as pl
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QParallelAnimationGroup
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
@@ -732,9 +732,15 @@ class MainWindow(QMainWindow):
 
     def _show_result_banner(self, status: str, message: str, detail_count: int = 0):
         """
-        显示结果横幅
+        显示结果横幅（规范2.4：带滑入动画）
         status: 'success' | 'warning' | 'error'
         detail_count: 问题数量，用于警告状态显示
+        
+        动画参数：
+        - 持续时间：400ms
+        - 缓动曲线：OutBack（弹性效果）
+        - 位移距离：20px
+        - 淡入时间：300ms
         """
         icon_map = {
             "success": ("✅", "#D1FAE5", "#065F46"),
@@ -773,6 +779,7 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 padding: 4px 12px;
                 font-size: 12px;
+                transition: background-color 200ms ease;
             }}
             QPushButton#btnViewDetail:hover, QPushButton#btnOpenOutput:hover {{
                 background-color: {text_color}30;
@@ -783,13 +790,57 @@ class MainWindow(QMainWindow):
                 border: none;
                 font-size: 18px;
                 font-weight: bold;
+                transition: background-color 200ms ease;
             }}
             QPushButton#btnBannerClose:hover {{
                 background-color: {text_color}20;
                 border-radius: 4px;
             }}
         """)
+        
+        # 执行滑入动画
+        self._animate_result_banner_slide_in()
+
+    def _animate_result_banner_slide_in(self):
+        """
+        结果横幅滑入动画（规范2.4）
+        - 持续时间：400ms
+        - 缓动曲线：OutBack（弹性效果）
+        - 位移距离：20px（从上方滑入）
+        """
+        # 确保组件可见
         self.result_banner.setVisible(True)
+        
+        # 获取当前几何信息
+        current_geometry = self.result_banner.geometry()
+        
+        # 创建位置动画：从上方20px滑入
+        self._banner_slide_animation = QPropertyAnimation(self.result_banner, b"geometry")
+        self._banner_slide_animation.setDuration(400)
+        self._banner_slide_animation.setEasingCurve(QEasingCurve.OutBack)
+        
+        # 起始位置：向上偏移20px
+        start_geometry = current_geometry
+        start_geometry.moveTop(current_geometry.top() - 20)
+        self._banner_slide_animation.setStartValue(start_geometry)
+        self._banner_slide_animation.setEndValue(current_geometry)
+        
+        self._banner_slide_animation.start()
+        
+        # 同时执行淡入动画
+        self._animate_result_banner_fade_in()
+        
+        logger.info("结果横幅滑入动画已触发")
+
+    def _animate_result_banner_fade_in(self):
+        """结果横幅淡入动画"""
+        self.result_banner.setWindowOpacity(0)
+        
+        self._banner_fade_animation = QPropertyAnimation(self.result_banner, b"windowOpacity")
+        self._banner_fade_animation.setDuration(300)
+        self._banner_fade_animation.setStartValue(0)
+        self._banner_fade_animation.setEndValue(1)
+        self._banner_fade_animation.start()
 
     def _on_view_detail_clicked(self):
         """查看详情按钮点击事件"""
@@ -875,7 +926,12 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("就绪")
 
     def _log_message(self, level: str, message: str):
-        """向日志区域和状态栏写入消息"""
+        """
+        向日志区域和状态栏写入消息（规范2.5：带新条目高亮闪烁）
+        
+        动画参数：
+        - 新条目高亮：500ms后移除
+        """
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted = f"[{timestamp}] [{level}] {message}"
@@ -883,9 +939,51 @@ class MainWindow(QMainWindow):
         # 追加到日志区域
         if hasattr(self, 'log_text'):
             self.log_text.append(formatted)
+            # 高亮最新条目
+            self._highlight_latest_log_entry()
         
         # 更新状态栏
         self.status_bar.showMessage(message, 5000)  # 5秒后恢复
+
+    def _highlight_latest_log_entry(self):
+        """
+        高亮最新的日志条目（规范2.5）
+        新日志短暂高亮提示，500ms后移除
+        """
+        if not hasattr(self, 'log_text') or self.log_text is None:
+            return
+        
+        # 设置高亮颜色
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1F2937;
+                color: #F9FAFB;
+                font-family: 'Monaco', 'Menlo', monospace;
+                font-size: 12px;
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QTextEdit QWidget {
+                background-color: #1F2937;
+            }
+        """)
+        
+        # 延迟500ms后恢复原样式
+        QTimer.singleShot(500, self._reset_log_highlight)
+
+    def _reset_log_highlight(self):
+        """重置日志高亮状态"""
+        if hasattr(self, 'log_text') and self.log_text is not None:
+            self.log_text.setStyleSheet("""
+                QTextEdit {
+                    background-color: #1F2937;
+                    color: #F9FAFB;
+                    font-family: 'Monaco', 'Menlo', monospace;
+                    font-size: 12px;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+            """)
 
     def _create_menu_bar(self):
         """创建菜单栏"""
@@ -894,12 +992,42 @@ class MainWindow(QMainWindow):
         # 文件菜单
         file_menu = menubar.addMenu("文件")
 
+        # [规范四] Ctrl+O: 打开文件
+        open_action = QAction("打开一线名单", self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(lambda: self._select_file("frontline"))
+        file_menu.addAction(open_action)
+
+        # [规范四] Ctrl+S: 保存配置
+        save_action = QAction("保存配置", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self._save_default_config)
+        file_menu.addAction(save_action)
+
+        file_menu.addSeparator()
+
+        # [规范四] Ctrl+R: 重新开始
+        restart_action = QAction("重新开始", self)
+        restart_action.setShortcut("Ctrl+R")
+        restart_action.triggered.connect(self._on_restart_processing)
+        file_menu.addAction(restart_action)
+
+        file_menu.addSeparator()
+
         exit_action = QAction("退出", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助")
+
+        # [规范四] F1: 打开帮助文档
+        help_action = QAction("帮助文档", self)
+        help_action.setShortcut("F1")
+        help_action.triggered.connect(self._show_help)
+        help_menu.addAction(help_action)
+
+        help_menu.addSeparator()
 
         # 版本记录
         version_action = QAction("📋 版本记录", self)
@@ -983,6 +1111,106 @@ class MainWindow(QMainWindow):
             f"<p>Copyright © 2026</p>"
         )
 
+    def _show_help(self):
+        """[规范四] 显示帮助文档"""
+        import subprocess
+        help_path = "/Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/README.md"
+        try:
+            subprocess.run(["open", help_path], check=True)
+            self._log_message("INFO", "已打开帮助文档")
+        except Exception as e:
+            QMessageBox.information(
+                self,
+                "帮助",
+                "帮助文档路径不存在，请联系管理员。"
+            )
+
+    def _on_restart_processing(self):
+        """[规范四] Ctrl+R: 重新开始处理"""
+        # 检查是否有正在进行的处理
+        if self.worker and self.worker.isRunning():
+            reply = QMessageBox.question(
+                self, "确认重新开始", "处理正在进行中，确定要取消并重新开始吗？",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                self.worker.requestInterruption()
+                self.worker.wait(3000)
+            else:
+                return
+        
+        # 重置界面状态
+        self._reset_all_inputs()
+        self._log_message("INFO", "已重新开始")
+
+    def _reset_all_inputs(self):
+        """重置所有输入状态"""
+        # 清除文件路径
+        for key in self.file_paths:
+            self.file_paths[key] = None
+        
+        # 清除输入框
+        for key, le in self.file_inputs.items():
+            le.clear()
+            le.setStyleSheet("")
+        
+        # 禁用可选输入框
+        self.file_inputs["third_party"].setDisabled(True)
+        self.file_inputs["hw"].setDisabled(True)
+        self.file_inputs["spec"].setDisabled(True)
+        
+        # 清除文件信息标签
+        for key, lbl in self.file_labels.items():
+            lbl.setText("")
+            lbl.setProperty("fileInfoState", "")
+            lbl.style().unpolish(lbl)
+            lbl.style().polish(lbl)
+        
+        # 清除去重字段
+        if hasattr(self, '_dedup_field'):
+            self._dedup_field = None
+        self.lbl_dedup_field.setText("（自动识别...）")
+        
+        # 隐藏结果横幅
+        self.result_banner.setVisible(False)
+        
+        # 重置开始按钮状态
+        self._update_start_button_state()
+
+    def keyPressEvent(self, event):
+        """
+        键盘快捷键处理（规范四）
+        
+        - Enter: 确认操作（如果开始按钮可用则触发开始处理）
+        - Esc: 取消/关闭对话框
+        - Space: 勾选/取消复选框（当复选框聚焦时）
+        """
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        # [规范四] Enter: 确认操作
+        if key == Qt.Key_Return or key == Qt.Key_Enter:
+            # 如果开始按钮可用且未在处理中，触发开始处理
+            if self.btn_start.isEnabled() and not (self.worker and self.worker.isRunning()):
+                self._on_start_processing()
+            return
+        
+        # [规范四] Esc: 取消/关闭
+        if key == Qt.Key_Escape:
+            # 如果有对话框在运行，关闭对话框
+            # 否则询问是否退出
+            if self.worker and self.worker.isRunning():
+                reply = QMessageBox.question(
+                    self, "确认取消", "确定要取消当前处理吗？",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    self.worker.requestInterruption()
+            return
+        
+        # 传递到父类处理默认行为
+        super().keyPressEvent(event)
+
     # ==================== 业务逻辑方法 ====================
 
     def _select_file(self, file_type: str):
@@ -1041,13 +1269,39 @@ class MainWindow(QMainWindow):
         self.file_inputs[file_type].setStyleSheet("")  # 清除错误样式
 
         # [FIX] 更新文件信息标签（列数/行数/Sheet名称）
+        # 使用动画效果（规范2.7）
         if file_type in ("frontline", "third_party", "hw"):
+            # 设置更新中状态
+            self._animate_file_info_updating(file_type)
+            
             file_info = self._get_file_info(file_path)
             if file_info:
                 sheet_info = f" | Sheet: {selected_sheet}" if selected_sheet else ""
                 info_text = f"✅ 已识别：{file_info['cols']} 列，{file_info['rows']:,} 行{sheet_info}"
                 self.file_labels[file_type].setText(info_text)
+                # 显示成功状态
+                self._animate_file_info_success(file_type)
                 self._log_message("INFO", f"已选择 [{file_type}]: {basename} ({file_info['rows']:,} 行){sheet_info}")
+
+    def _animate_file_info_updating(self, file_type: str):
+        """
+        文件信息标签更新中动画（规范2.7）
+        """
+        label = self.file_labels.get(file_type)
+        if label:
+            label.setProperty("fileInfoState", "updating")
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    def _animate_file_info_success(self, file_type: str):
+        """
+        文件信息标签成功动画（规范2.7）
+        """
+        label = self.file_labels.get(file_type)
+        if label:
+            label.setProperty("fileInfoState", "success")
+            label.style().unpolish(label)
+            label.style().polish(label)
 
         # 如果是字典文件，检查MD5变更并显示版本信息
         if file_type == "dict":

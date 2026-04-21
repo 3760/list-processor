@@ -1,6 +1,6 @@
 /*
 客户名单数据预处理工具 - UI 样式表
-基于 UI设计规范-v1.0-20260417
+基于 UI设计规范-v1.0-20260417 + UI交互与动画规范-v1.1-20260421
 
 色彩系统：
 - Primary: #2563EB
@@ -12,6 +12,14 @@
 - Border: #E5E7EB
 - Background: #F9FAFB
 - Surface: #FFFFFF
+
+动画参数（来自UI交互与动画规范-v1.1）：
+- 按钮悬停进入：200ms ease-out
+- 按钮悬停离开：150ms ease-in
+- 按钮按下：50ms linear
+- 禁用状态过渡：200ms ease
+- 进度条填充：300ms ease-out
+- 进度条条纹：1000ms linear infinite
 */
 
 /* [20260420-老谈] 修复 macOS 字体警告 - Qt 只识别特定字体名称 */
@@ -49,6 +57,7 @@ QGroupBox::title {
 }
 
 /* ==================== 输入框 ==================== */
+/* 禁用状态过渡：200ms ease */
 
 QLineEdit {
     height: 36px;
@@ -58,6 +67,7 @@ QLineEdit {
     background-color: #FFFFFF;
     font-size: 13px;
     color: #111827;
+    transition: border-color 200ms ease, background-color 200ms ease;
 }
 
 QLineEdit:focus {
@@ -65,16 +75,21 @@ QLineEdit:focus {
     outline: none;
 }
 
+QLineEdit:hover:not(:focus):not(:disabled) {
+    border-color: #9CA3AF;
+}
+
 QLineEdit:disabled {
     background-color: #F3F4F6;
     color: #9CA3AF;
+    transition: all 200ms ease;
 }
 
 /* ==================== 按钮 ==================== */
+/* 交互动画参数：悬停进入200ms ease-out，悬停离开150ms ease-in，按下50ms linear */
 
 /* 主按钮 - 开始处理 */
-/* P2-10：移除 box-shadow，使用 Qt 兼容的 border 模拟阴影效果 */
-QPushButton#btnPrimary {
+QPushButton#btnStart, QPushButton#btnPrimary {
     background-color: #2563EB;
     color: #FFFFFF;
     border: none;
@@ -84,23 +99,32 @@ QPushButton#btnPrimary {
     min-height: 44px;
     min-width: 200px;
     padding: 0 24px;
+    /* 交互动画：悬停上移1px + 阴影增强 */
+    margin-bottom: 0px;
+    transition: all 200ms ease-out;
 }
 
-QPushButton#btnPrimary:hover {
-    background-color: #1D4ED8;
+QPushButton#btnStart:hover, QPushButton#btnPrimary:hover {
+    background-color: #3B82F6;
+    margin-bottom: 1px;
+    margin-top: 0px;
 }
 
-QPushButton#btnPrimary:pressed {
+QPushButton#btnStart:pressed, QPushButton#btnPrimary:pressed {
     background-color: #1E40AF;
+    margin-top: 1px;
+    margin-bottom: 0px;
+    transition: all 50ms linear;
 }
 
-QPushButton#btnPrimary:disabled {
+QPushButton#btnStart:disabled, QPushButton#btnPrimary:disabled {
     background-color: #E5E7EB;
     color: #9CA3AF;
+    margin-bottom: 0px;
 }
 
 /* 次要按钮 - 取消 */
-QPushButton#btnSecondary {
+QPushButton#btnCancel, QPushButton#btnSecondary {
     background-color: #FFFFFF;
     color: #374151;
     border: 1px solid #D1D5DB;
@@ -109,17 +133,24 @@ QPushButton#btnSecondary {
     font-weight: 500;
     min-height: 36px;
     padding: 0 16px;
+    transition: all 200ms ease-out;
 }
 
-QPushButton#btnSecondary:hover {
+QPushButton#btnCancel:hover, QPushButton#btnSecondary:hover {
     background-color: #F9FAFB;
     border-color: #9CA3AF;
 }
 
-QPushButton#btnSecondary:disabled {
+QPushButton#btnCancel:pressed, QPushButton#btnSecondary:pressed {
+    background-color: #F3F4F6;
+    transition: all 50ms linear;
+}
+
+QPushButton#btnCancel:disabled, QPushButton#btnSecondary:disabled {
     background-color: #F3F4F6;
     color: #9CA3AF;
     border-color: #E5E7EB;
+    transition: all 200ms ease;
 }
 
 /* 通用按钮样式 */
@@ -132,6 +163,7 @@ QPushButton {
     font-weight: 500;
     min-height: 36px;
     padding: 0 16px;
+    transition: all 200ms ease-out;
 }
 
 QPushButton:hover {
@@ -139,16 +171,32 @@ QPushButton:hover {
     border-color: #9CA3AF;
 }
 
+QPushButton:pressed {
+    background-color: #F3F4F6;
+    transition: all 50ms linear;
+}
+
 QPushButton:disabled {
     background-color: #F3F4F6;
     color: #9CA3AF;
     border-color: #E5E7EB;
+    transition: all 200ms ease;
 }
 
-/* 浏览按钮 */
+/* 浏览/导入按钮 */
 QPushButton#btnBrowse {
     min-width: 80px;
     min-height: 36px;
+    transition: all 200ms ease-out;
+}
+
+QPushButton#btnBrowse:hover {
+    background-color: #F3F4F6;
+    transform: scale(1.02);
+}
+
+QPushButton#btnBrowse:pressed {
+    transform: scale(0.98);
 }
 
 /* ==================== 下拉框 ==================== */
@@ -186,11 +234,13 @@ QComboBox QAbstractItemView {
 }
 
 /* ==================== 复选框 ==================== */
+/* 禁用状态过渡：200ms ease */
 
 QCheckBox {
     font-size: 13px;
     color: #374151;
     spacing: 8px;
+    transition: opacity 200ms ease;
 }
 
 QCheckBox::indicator {
@@ -199,6 +249,11 @@ QCheckBox::indicator {
     border-radius: 4px;
     border: 2px solid #D1D5DB;
     background-color: #FFFFFF;
+    transition: all 150ms ease;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #9CA3AF;
 }
 
 QCheckBox::indicator:checked {
@@ -206,12 +261,20 @@ QCheckBox::indicator:checked {
     border-color: #2563EB;
 }
 
+QCheckBox::indicator:checked:hover {
+    background-color: #3B82F6;
+    border-color: #3B82F6;
+}
+
 QCheckBox::indicator:disabled {
     opacity: 0.5;
+    transition: opacity 200ms ease;
 }
 
 /* ==================== 进度条 ==================== */
+/* 动画参数：填充速度300ms ease-out，条纹速度1000ms linear infinite */
 
+/* 进度条条纹动画关键帧 - 使用 Qt 动画框架时需要的样式 */
 QProgressBar {
     height: 8px;
     border-radius: 4px;
@@ -224,6 +287,23 @@ QProgressBar {
 QProgressBar::chunk {
     background-color: #2563EB;
     border-radius: 4px;
+    /* 渐变光泽效果 */
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 0,
+        stop: 0 #2563EB,
+        stop: 0.5 #3B82F6,
+        stop: 1 #2563EB
+    );
+}
+
+/* 进度条加载中状态条纹动画 */
+QProgressBar[indeterminate="true"]::chunk {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 0,
+        stop: 0 #2563EB,
+        stop: 0.5 #60A5FA,
+        stop: 1 #2563EB
+    );
 }
 
 /* ==================== 日志区域 ==================== */
@@ -256,10 +336,25 @@ QLabel#labelRequired::after {
     color: #EF4444;
 }
 
-/* 文件信息标签 */
+/* 文件信息标签 - 带动画效果（规范2.7） */
 QLabel#fileInfo {
     font-size: 12px;
     color: #6B7280;
+    transition: opacity 300ms ease, color 300ms ease;
+}
+
+QLabel#fileInfo.updating {
+    opacity: 0.5;
+}
+
+QLabel#fileInfo.success {
+    color: #059669;
+    opacity: 1;
+}
+
+QLabel#fileInfo.error {
+    color: #DC2626;
+    opacity: 1;
 }
 
 /* ==================== 结果横幅 ==================== */

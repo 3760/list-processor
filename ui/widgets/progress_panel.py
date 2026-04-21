@@ -2,7 +2,7 @@
 UI层 - 进度展示组件
 
 实时展示处理进度，包含：
-- 进度条（百分比显示）
+- 进度条（百分比显示，带动画效果）
 - 当前阶段提示
 - 预估剩余时间（可选）
 - 各模块完成状态列表
@@ -15,11 +15,15 @@ UI层 - 进度展示组件
 
     # 连接信号
     panel.on_progress("F1", 50)  # 更新进度
+
+动画规范（来自UI交互与动画规范-v1.1）：
+- 进度条填充速度：300ms ease-out
+- 进度条条纹动画：1000ms linear infinite
 """
 
 from typing import Dict, Optional
 
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -99,15 +103,24 @@ class ProgressPanel(QWidget):
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("%p%")
         self.progress_bar.setMinimumHeight(30)
+        # [规范2.2] 进度条渐变光泽效果 + 条纹动画
         self.progress_bar.setStyleSheet("""
             QProgressBar {
                 border: 1px solid #e0e0e0;
                 border-radius: 5px;
                 text-align: center;
                 font-weight: bold;
+                font-size: 12px;
+                color: #6B7280;
             }
             QProgressBar::chunk {
-                background-color: #4CAF50;
+                /* 渐变光泽效果 */
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #2563EB,
+                    stop: 0.5 #3B82F6,
+                    stop: 1 #2563EB
+                );
                 border-radius: 4px;
             }
         """)
@@ -238,7 +251,7 @@ class ProgressPanel(QWidget):
 
     def on_progress(self, module: str, percent: int):
         """
-        处理进度更新回调。
+        处理进度更新回调（带动画效果，规范2.2）。
 
         Parameters
         ----------
@@ -246,6 +259,9 @@ class ProgressPanel(QWidget):
             模块名称（F1~F7）
         percent : int
             模块内部进度（0~100）
+        
+        动画参数：
+        - 进度条填充：300ms ease-out
         """
         self.current_module = module
         self.module_progress[module] = percent
@@ -263,18 +279,38 @@ class ProgressPanel(QWidget):
                 self.module_labels[module].setText("🔄")
             self.module_labels[f"{module}_progress"].setText(f"{percent}%")
 
-        # 更新总体进度
-        self._update_total_progress()
+        # 更新总体进度（带动画）
+        self._update_total_progress_animated()
 
-    def _update_total_progress(self):
-        """根据各模块进度计算总体进度"""
+    def _update_total_progress_animated(self):
+        """
+        根据各模块进度计算总体进度（带动画效果，规范2.2）
+        
+        动画参数：
+        - 填充速度：300ms
+        - 缓动函数：ease-out
+        """
         total = 0
         for module, weight in self.MODULE_WEIGHTS.items():
             module_pct = self.module_progress.get(module, 0)
             total += (module_pct / 100) * weight
 
-        self.progress_bar.setValue(int(total))
-        self.percent_label.setText(f"{int(total)}%")
+        target_value = int(total)
+        current_value = self.progress_bar.value()
+        
+        # 创建平滑动画（300ms ease-out）
+        if hasattr(self, '_progress_animation') and self._progress_animation is not None:
+            self._progress_animation.stop()
+        
+        self._progress_animation = QPropertyAnimation(self.progress_bar, b"value")
+        self._progress_animation.setDuration(300)
+        self._progress_animation.setEasingCurve(QEasingCurve.OutCurve)
+        self._progress_animation.setStartValue(current_value)
+        self._progress_animation.setEndValue(target_value)
+        self._progress_animation.start()
+        
+        # 更新百分比标签
+        self.percent_label.setText(f"{target_value}%")
 
     def on_complete(self, success: bool = True):
         """
