@@ -289,45 +289,43 @@ class MainWindow(QMainWindow):
             ("spec", "字段规范", "config/field_spec.yaml", False),
         ]
 
-        for row_idx, (key, label_text, placeholder, required) in enumerate(file_configs):
+        for key, label_text, placeholder, required in file_configs:
             # 单行布局：标签 + 输入框 + 文件信息 + 按钮
             row_widget = QWidget()
             row_widget.setFixedHeight(36)
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(8)  # 缩小间距
+            row_layout.setSpacing(8)
 
             # 标签
             lbl = QLabel(label_text)
             lbl.setFixedWidth(LABEL_WIDTH)
-            if required:
-                lbl.setText(f"{label_text} *")
-                lbl.setStyleSheet("font-size: 13px; font-weight: 500; color: #111827;")
-            else:
-                lbl.setStyleSheet("font-size: 13px; color: #6B7280;")
+            lbl.setStyleSheet(
+                "font-size: 13px; font-weight: 500; color: #111827;" if required
+                else "font-size: 13px; color: #6B7280;"
+            )
             row_layout.addWidget(lbl)
 
-            # 输入框（缩小宽度，给文件信息和按钮留空间）
+            # 输入框
             le = QLineEdit()
             le.setPlaceholderText(placeholder)
             le.setMinimumHeight(HEIGHT_ELEMENT)
-            le.setFixedWidth(280)  # 缩小输入框宽度
+            le.setFixedWidth(280)
             if not required:
                 le.setDisabled(True)
-            row_layout.addWidget(le, 0)  # 不再拉伸
+            row_layout.addWidget(le, 0)
             self.file_inputs[key] = le
 
-            # 文件信息标签（放在按钮左侧）
+            # 文件信息标签
             info_lbl = QLabel()
             info_lbl.setObjectName("fileInfo")
             info_lbl.setStyleSheet("font-size: 12px; color: #6B7280;")
-            row_layout.addWidget(info_lbl, 1)  # 拉伸占满剩余空间
+            row_layout.addWidget(info_lbl, 1)
             self.file_labels[key] = info_lbl
 
             # 浏览/导入按钮
-            btn_text = "导入" if key == "spec" else "浏览"
-            btn = QPushButton(btn_text)
-            btn.setFixedSize(60, HEIGHT_ELEMENT)  # 缩小按钮
+            btn = QPushButton("导入" if key == "spec" else "浏览")
+            btn.setFixedSize(60, HEIGHT_ELEMENT)
             btn.clicked.connect(lambda checked, k=key: self._select_file(k))
             row_layout.addWidget(btn)
             self.file_buttons[key] = btn
