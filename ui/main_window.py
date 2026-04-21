@@ -306,6 +306,7 @@ class MainWindow(QMainWindow):
                 le.setDisabled(True)
             le.setObjectName(f"txt{key.capitalize()}")
             row_layout.addWidget(le, 1)
+            self.file_inputs[key] = le  # 添加到字典
 
             # 浏览/导入按钮
             btn_text = "导入" if key == "spec" else "浏览"
