@@ -1531,10 +1531,6 @@ class MainWindow(QMainWindow):
 
         logger.debug(f"[_select_file] 开始选择文件: file_type={file_type}")
 
-        # [优化] 禁用所有浏览按钮，避免读取过程中重复选择
-        for key, btn in self.file_buttons.items():
-            btn.setEnabled(False)
-
         # [FIX v1.0.6] spec 类型使用特殊导入对话框
         if file_type == "spec":
             logger.debug(f"[_select_file] 使用特殊导入对话框处理 spec 类型")
@@ -1580,6 +1576,8 @@ class MainWindow(QMainWindow):
 
         # [优化 v1.0.7] 将 Sheet 检测和文件信息获取都移至后台执行，避免 UI 卡顿
         if file_type in ("frontline", "third_party", "hw"):
+            # 立即禁用当前浏览按钮，避免重复选择
+            self.file_buttons[file_type].setEnabled(False)
             # 立即显示加载状态
             self._animate_file_info_updating(file_type)
             
@@ -1612,10 +1610,11 @@ class MainWindow(QMainWindow):
                     return
                 else:
                     logger.warning(f"[_fetch_file_and_sheet_async] [2/4] Sheet 列表为空！")
-                    # 返回空，启用按钮
+                    # 返回空，启用当前按钮
                     from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
-                    QMetaObject.invokeMethod(self, "_enable_all_browse_buttons",
-                        Qt.QueuedConnection)
+                    QMetaObject.invokeMethod(self, "_enable_browse_button_slot",
+                        Qt.QueuedConnection,
+                        Q_ARG(str, file_type))
                     return
                 
                 # 3. 获取文件信息
@@ -1670,6 +1669,17 @@ class MainWindow(QMainWindow):
         """[优化] 重新启用所有浏览按钮"""
         for key, btn in self.file_buttons.items():
             btn.setEnabled(True)
+
+    def _enable_browse_button(self, file_type: str):
+        """[优化] 重新启用指定类型的浏览按钮"""
+        btn = self.file_buttons.get(file_type)
+        if btn:
+            btn.setEnabled(True)
+
+    @pyqtSlot(str)
+    def _enable_browse_button_slot(self, file_type: str):
+        """[优化] 通过 Qt 信号调用重新启用指定类型的浏览按钮"""
+        self._enable_browse_button(file_type)
 
     def _get_excel_sheet_names_from_xml(self, file_path: str) -> list:
         """
@@ -1727,7 +1737,7 @@ class MainWindow(QMainWindow):
                 logger.debug(f"[_show_sheet_selection_dialog] 用户取消选择")
                 self.file_paths[file_type] = None
                 self.file_inputs[file_type].clear()
-                self._enable_all_browse_buttons()
+                self._enable_browse_button(file_type)
                 return
 
         # 保存 Sheet 选择结果
@@ -2070,8 +2080,8 @@ class MainWindow(QMainWindow):
         """[优化] 在主线程安全更新文件信息UI（由后台线程调用）"""
         logger.debug(f"[_update_file_info_safe] 收到文件信息更新: file_type={file_type}, file_info={file_info}, basename={basename}")
         
-        # [优化] 操作完成后重新启用所有浏览按钮
-        self._enable_all_browse_buttons()
+        # [优化] 操作完成后重新启用当前浏览按钮
+        self._enable_browse_button(file_type)
         try:
             if file_info and (file_info.get('rows', 0) > 0 or file_info.get('cols', 0) > 0):
                 sheet_info = f" | Sheet: {selected_sheet}" if selected_sheet else ""
