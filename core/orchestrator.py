@@ -92,6 +92,8 @@ class ProcessOrchestrator:
                 # 2. 计时执行
                 start_time = time.time()
                 try:
+                    # [优化] 将进度回调传递给模块，支持模块内部细化进度
+                    module._progress_callback = self.progress_callback
                     context = module.execute(context)
                 except Exception as e:
                     elapsed_ms = int((time.time() - start_time) * 1000)

@@ -436,7 +436,8 @@ class MainWindow(QMainWindow):
         self.file_buttons = {}
         
         # [优化] 记录每个文件类型正在运行的读取线程和取消标志
-        self._file_load_threads = {}  # {file_type: {"thread": Thread, "cancel_flag": threading.Event}}
+        self._file_load_threads = {}  # {file_type: {"thread": Thread, "cancel_flag": threading.Event, "seq": int}}
+        self._file_load_seq = 0  # 文件加载序列号递增计数器
 
         # 文件配置：key, 标签, 提示, 是否必填
         file_configs = [
@@ -1597,7 +1598,7 @@ class MainWindow(QMainWindow):
                 
                 # 检查是否被取消
                 if cancel_flag.is_set():
-                    logger.debug(f"[_fetch_file_and_sheet_async] 线程已被取消，退出")
+                    logger.info(f"[_fetch_file_and_sheet_async] 线程已被取消，退出")
                     return
                 
                 # 1. 先获取 Sheet 列表
@@ -1606,7 +1607,7 @@ class MainWindow(QMainWindow):
                 
                 # 检查是否被取消
                 if cancel_flag.is_set():
-                    logger.debug(f"[_fetch_file_and_sheet_async] 获取Sheet后被取消，退出")
+                    logger.info(f"[_fetch_file_and_sheet_async] 获取Sheet后被取消，退出")
                     return
                 
                 logger.info(f"[_fetch_file_and_sheet_async] [1/4] Sheet 列表: {sheet_names}，耗时: {time.time()-t0:.3f}s")
@@ -1635,25 +1636,31 @@ class MainWindow(QMainWindow):
                 
                 # 3. 获取文件信息
                 logger.info(f"[_fetch_file_and_sheet_async] [3/4] 调用 _get_file_info...")
-                file_info = self._get_file_info(file_path, selected_sheet)
+                file_info = self._get_file_info(file_path, selected_sheet, cancel_flag)
                 logger.info(f"[_fetch_file_and_sheet_async] [3/4] _get_file_info 完成，耗时: {time.time()-t0:.3f}s, 结果: {file_info}")
                 
-                # 4. 更新 UI
+                # 4. 更新 UI（带上序列号，防止旧线程覆盖新结果）
                 from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
                 QMetaObject.invokeMethod(self, "_update_file_info_safe",
                     Qt.QueuedConnection,
                     Q_ARG(str, file_type),
                     Q_ARG(object, file_info),
                     Q_ARG(object, selected_sheet),
-                    Q_ARG(str, basename))
+                    Q_ARG(str, basename),
+                    Q_ARG(int, current_seq))
 
+            # 递增序列号
+            self._file_load_seq += 1
+            current_seq = self._file_load_seq
+            
             thread = threading.Thread(target=_fetch_file_and_sheet_async, daemon=True)
             thread.start()
             
             # 记录线程，用于后续取消
             self._file_load_threads[file_type] = {
                 "thread": thread,
-                "cancel_flag": cancel_flag
+                "cancel_flag": cancel_flag,
+                "seq": current_seq
             }
 
         # 字典文件处理
@@ -1678,7 +1685,7 @@ class MainWindow(QMainWindow):
         if file_type in self._file_load_threads:
             old_thread_info = self._file_load_threads[file_type]
             old_thread_info["cancel_flag"].set()  # 设置取消标志
-            logger.debug(f"[_cancel_file_load_thread] 已取消旧线程: {file_type}")
+            logger.info(f"[_cancel_file_load_thread] ✓ 已取消旧读取线程: {file_type}")
             del self._file_load_threads[file_type]
 
     def _animate_file_info_updating(self, file_type: str):
@@ -1756,16 +1763,19 @@ class MainWindow(QMainWindow):
         if not hasattr(self, '_sheet_selections'):
             self._sheet_selections = {}
         self._sheet_selections[file_type] = selected
+        
+        # 获取当前线程的序列号（如果存在）
+        current_seq = self._file_load_threads.get(file_type, {}).get("seq", 0)
 
         # 继续获取文件信息
         file_path = self.file_paths.get(file_type)
         basename = os.path.basename(file_path) if file_path else ""
         
-        logger.debug(f"[_show_sheet_selection_dialog] 获取文件信息: sheet={selected}")
+        logger.debug(f"[_show_sheet_selection_dialog] 获取文件信息: sheet={selected}, seq={current_seq}")
         file_info = self._get_file_info(file_path, selected)
         
-        # 更新 UI
-        self._update_file_info_safe(file_type, file_info, selected, basename)
+        # 更新 UI（带上序列号）
+        self._update_file_info_safe(file_type, file_info, selected, basename, current_seq)
 
     def _animate_file_info_success(self, file_type: str):
         """
@@ -1950,9 +1960,10 @@ class MainWindow(QMainWindow):
             logger.warning(f"读取Excel Sheet列表失败: {e}")
             return []
 
-    def _get_file_info(self, file_path: str, sheet_name: str = None) -> dict:
+    def _get_file_info(self, file_path: str, sheet_name: str = None, cancel_flag=None) -> dict:
         """
         获取文件基本信息（列数、行数）
+        cancel_flag: threading.Event，可选，用于支持取消操作
         [优化 v1.0.7] CSV 使用 line count，Excel 直接解析 XML（比 openpyxl 快 5-10 倍）
         
         Parameters
@@ -1989,6 +2000,11 @@ class MainWindow(QMainWindow):
                 # Excel 文件：直接解析 XLSX XML 获取行数（快 5-10 倍）
                 logger.info(f"[_get_file_info] [1] Excel 文件，直接解析 XLSX XML...")
                 t1 = time_module.time()
+                
+                # [优化] 读取 worksheet 前检查取消标志
+                if cancel_flag and cancel_flag.is_set():
+                    logger.info(f"[_get_file_info] 已被取消，退出")
+                    return {"rows": 0, "cols": 0}
                 
                 # 获取 zip 内所有文件，动态查找 workbook.xml 位置
                 with zipfile.ZipFile(file_path) as z:
@@ -2087,10 +2103,16 @@ class MainWindow(QMainWindow):
         
         return result
 
-    @pyqtSlot(str, object, object, str)
-    def _update_file_info_safe(self, file_type: str, file_info: dict, selected_sheet, basename: str):
+    @pyqtSlot(str, object, object, str, int)
+    def _update_file_info_safe(self, file_type: str, file_info: dict, selected_sheet, basename: str, seq: int):
         """[优化] 在主线程安全更新文件信息UI（由后台线程调用）"""
-        logger.debug(f"[_update_file_info_safe] 收到文件信息更新: file_type={file_type}, file_info={file_info}, basename={basename}")
+        # [优化] 序列号检查：只处理最新的结果，忽略被取消的旧线程的结果
+        current_seq = self._file_load_threads.get(file_type, {}).get("seq", 0)
+        if seq < current_seq:
+            logger.info(f"[_update_file_info_safe] 忽略过期结果: seq={seq} < current_seq={current_seq}")
+            return
+        
+        logger.debug(f"[_update_file_info_safe] 收到文件信息更新: file_type={file_type}, seq={seq}, basename={basename}")
         try:
             if file_info and (file_info.get('rows', 0) > 0 or file_info.get('cols', 0) > 0):
                 sheet_info = f" | Sheet: {selected_sheet}" if selected_sheet else ""

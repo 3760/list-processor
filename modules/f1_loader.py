@@ -6,11 +6,9 @@ F1 - 文件加载模块
 
 处理顺序：一线 → 三方 → HW（DEV-05 多Sheet策略）
 """
-import uuid
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
-import openpyxl
 import polars as pl
 
 from core.context import ProcessContext
@@ -26,7 +24,6 @@ LIST_TYPE_MAP = {
     "三方": "sanfang",
     "hw": "hw",
 }
-INTERNAL_KEYS = ["yixian", "sanfang", "hw"]
 
 
 def _detect_csv_encoding(file_path: str) -> str:
@@ -61,6 +58,7 @@ def load_files(
     file_paths: dict[str, str],
     sheet_selections: Optional[dict[str, str]] = None,
     dedup_field: Optional[str] = None,
+    progress_callback: Optional[callable] = None,
 ) -> ProcessContext:
     """
     加载三类名单文件，添加 `_来源` 列。
@@ -88,6 +86,9 @@ def load_files(
         UI层预选的Sheet名称，直接使用，无需弹窗回调
     dedup_field : str, optional
         去重字段名（由调用方根据三级策略确定后传入）
+    progress_callback : callable, optional
+        进度回调，签名为 (list_type: str, percent: int) -> None
+        用于实时报告每个文件的加载进度
 
     Returns
     -------
@@ -99,13 +100,18 @@ def load_files(
     if sheet_selections is None:
         sheet_selections = {}
 
-    for list_type, file_path in file_paths.items():
-        if not file_path:
-            logger.info(f"  [{list_type}] 未指定文件，跳过")
-            continue
+    # 构建文件列表并计算进度
+    file_list = [(lt, fp) for lt, fp in file_paths.items() if fp]
+    total_files = len(file_list)
+    F1_WEIGHT = 15  # F1 总权重
+
+    for i, (list_type, file_path) in enumerate(file_list):
+        # 计算基于F1总权重的进度
+        base_percent = int(i / total_files * F1_WEIGHT)
+        if progress_callback:
+            progress_callback(f"F1_{list_type}", base_percent)
 
         try:
-            # [20260420-老谈] ISSUE-09: 传递预选 Sheet 而非 callback
             pre_selected_sheet = sheet_selections.get(list_type)
             df = _load_single_file(file_path, list_type, pre_selected_sheet)
             internal_key = LIST_TYPE_MAP.get(list_type, list_type)
@@ -117,6 +123,11 @@ def load_files(
                 message=f"[{list_type}] 加载成功，{len(df)} 行",
             )
             logger.info(f"  [{list_type}] 加载成功，{len(df)} 行")
+
+            # 文件加载完成，更新进度
+            if progress_callback:
+                progress_callback(f"F1_{list_type}", int((i + 1) / total_files * F1_WEIGHT))
+
         except Exception as e:
             logger.error(f"  [{list_type}] 加载失败: {e}")
             ctx.record_module_result(
@@ -177,32 +188,15 @@ def _load_single_file(
         return df
 
     # Excel 文件处理
-    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
-    sheet_names = wb.sheetnames
-    wb.close()
-
-    # 确定要读取的 Sheet
-    if pre_selected_sheet and pre_selected_sheet in sheet_names:
-        sheet_name = pre_selected_sheet
-        logger.info(f"  [{list_type}] 使用预选Sheet: {sheet_name}")
-    elif len(sheet_names) == 1:
-        sheet_name = sheet_names[0]
-        logger.info(f"  [{list_type}] 单Sheet，直接读取: {sheet_name}")
-    elif pre_selected_sheet:
-        # 预选Sheet不在列表中，降级到第一个
-        sheet_name = sheet_names[0]
-        logger.warning(
-            f"  [{list_type}] 预选Sheet '{pre_selected_sheet}' 不存在，"
-            f"降级到: {sheet_name}"
-        )
+    # [优化 F1] 简化逻辑：UI层已限制不会出现多Sheet，直接用 polars 读取
+    # polars 默认读取第一个 sheet，无需 openpyxl
+    if pre_selected_sheet:
+        logger.info(f"  [{list_type}] 使用预选Sheet: {pre_selected_sheet}")
+        df = pl.read_excel(file_path, sheet_name=pre_selected_sheet)
     else:
-        # 无预选时默认选第一个
-        sheet_name = sheet_names[0]
-        logger.info(
-            f"  [{list_type}] 多Sheet（无预选），默认选择: {sheet_name}"
-        )
-
-    df = pl.read_excel(file_path, sheet_name=sheet_name)
+        # UI层已限制不会出现多Sheet，这里直接读取第一个sheet
+        logger.info(f"  [{list_type}] 读取Excel文件（默认第一个Sheet）")
+        df = pl.read_excel(file_path)
 
     if df.is_empty():
         raise DataQualityError(f"[{list_type}] 文件为空: {file_path}")
@@ -212,37 +206,6 @@ def _load_single_file(
 
     logger.debug(f"  [{list_type}] 读取完成，Shape: {df.shape}, 列: {df.columns}")
     return df
-
-
-def detect_dedup_field(df: pl.DataFrame) -> Optional[str]:
-    """
-    NQ-02 三级识别策略 第②级：
-    列名关键字模糊匹配（email/邮箱/mail/e-mail，不区分大小写）。
-
-    Parameters
-    ----------
-    df : pl.DataFrame
-
-    Returns
-    -------
-    str | None
-        匹配到的列名，未匹配到返回 None
-    """
-    keywords = ["email", "邮箱", "mail", "e-mail", "e_mail"]
-    cols_lower = [c.lower() for c in df.columns]
-
-    for kw in keywords:
-        for col, col_lc in zip(df.columns, cols_lower):
-            if kw in col_lc:
-                logger.info(f"关键字匹配去重字段: {col}")
-                return col
-
-    return None
-
-
-def get_all_columns(df: pl.DataFrame) -> list[str]:
-    """返回所有列名（供 UI 下拉选择）"""
-    return df.columns
 
 
 class FileLoaderModule(BaseModule):
@@ -261,15 +224,12 @@ class FileLoaderModule(BaseModule):
         yixian = context.get_input_file("yixian")
         if not yixian:
             return False, "请选择一线人员名单文件"
-        import os
-        if not os.path.exists(yixian):
+        if not Path(yixian).exists():
             return False, f"一线人员名单文件不存在: {yixian}"
         return True, ""
 
     def execute(self, context: ProcessContext) -> ProcessContext:
         """执行文件加载 + 字段规范 + 数据字典 + 去重字段识别"""
-        from modules.f1_loader import load_files, LIST_TYPE_MAP, detect_dedup_field
-
         # ── Step 1：加载三类名单 Excel → DataFrame ──
         reverse_map = {v: k for k, v in LIST_TYPE_MAP.items()}
         file_paths = {}
@@ -294,11 +254,14 @@ class FileLoaderModule(BaseModule):
                 sheet_selections[list_key] = pre_selected_sheets[ui_key]
 
         dedup_field = getattr(context, 'dedup_field', None)
+        # 获取 orchestrator 传递的进度回调
+        progress_callback = getattr(self, '_progress_callback', None)
         context = load_files(   # ← BUG-18 修复：返回值必须回写 context
             ctx=context,
             file_paths=file_paths,
             sheet_selections=sheet_selections,  # [20260420-老谈] ISSUE-09: 传递预选Sheet
             dedup_field=dedup_field,
+            progress_callback=progress_callback,
         )
         logger.info(f"[F1] 文件加载完成，dataframes keys: {list(context.dataframes.keys())}")
 

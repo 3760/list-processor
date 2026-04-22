@@ -58,6 +58,9 @@ class ProgressPanel(QWidget):
     # 模块名称映射（中文显示）
     MODULE_NAMES = {
         "F1": "文件加载",
+        "F1_一线": "加载一线名单",
+        "F1_三方": "加载三方名单",
+        "F1_HW": "加载HW名单",
         "F2": "字段合规检查",
         "F3": "跨名单去重",
         "F4": "数据字典上码",
@@ -65,6 +68,13 @@ class ProgressPanel(QWidget):
         "F6": "名单内部去重",
         "F7": "结果输出",
         "完成": "处理完成",
+    }
+
+    # F1 子模块名称（用于阶段提示）
+    F1_SUB_NAMES = {
+        "一线": "一线名单",
+        "三方": "三方名单",
+        "HW": "HW名单",
     }
 
     # 模块进度权重（总计100%）
@@ -244,15 +254,26 @@ class ProgressPanel(QWidget):
         Parameters
         ----------
         module : str
-            模块名称（F1~F7）
+            模块名称（F1~F7 或 F1_xxx 子模块）
         percent : int
             模块内部进度（0~100）
-        
+
         动画参数：
         - 进度条填充：300ms ease-out
         """
         self.current_module = module
         self.module_progress[module] = percent
+
+        # 处理 F1 子模块（用于细化文件加载进度）
+        if module.startswith("F1_"):
+            # F1_一线、F1_三方、F1_HW 格式
+            sub_type = module.split("_", 1)[1]  # "一线"、"三方"、"HW"
+            sub_name = self.F1_SUB_NAMES.get(sub_type, sub_type)
+            self.stage_label.setText(f"正在加载: {sub_name} ({percent}%)")
+            # F1 子模块的进度已由 load_files 中的回调计算
+            # 这里只需要更新 F1 的总体进度
+            self._update_total_progress_animated()
+            return
 
         # 更新阶段提示
         module_name = self.MODULE_NAMES.get(module, module)
