@@ -30,18 +30,22 @@ class ProcessOrchestrator:
         按执行顺序排列的业务模块列表
     progress_callback : Callable[[str, int], None], optional
         进度回调函数，签名：(module_name, percent)
+    status_callback : Callable[[str, str], None], optional
+        状态回调函数，签名：(module_name, status) - status: pending/running/skipped/completed/failed
     """
 
     def __init__(
         self,
         modules: List[BaseModule],
         progress_callback: Optional[Callable[[str, int], None]] = None,
+        status_callback: Optional[Callable[[str, str], None]] = None,
     ):
         if not modules:
             raise ValueError("模块列表不能为空")
 
         self.modules = modules
         self.progress_callback = progress_callback
+        self.status_callback = status_callback  # 状态回调
         total_weight = sum(m.get_progress_weight() for m in modules)
         self._total_weight = total_weight if total_weight > 0 else 1  # [FIX #6] 防止零除错误
 
@@ -76,6 +80,9 @@ class ProcessOrchestrator:
                 module_name = module.get_module_name()
                 logger.info(f"========== 开始模块 {module_name} ==========")
 
+                # 通知模块开始执行
+                self._report_status(module_name, "running")
+
                 # 1. 前置校验
                 valid, err_msg = module.validate_input(context)
                 if not valid:
@@ -87,6 +94,8 @@ class ProcessOrchestrator:
                         skip_count=0,
                         message=f"前置校验未通过: {err_msg}",
                     )
+                    # 通知模块跳过
+                    self._report_status(module_name, "skipped")
                     self._report_progress(module_name, completed_weight)
                     continue
 
@@ -110,6 +119,8 @@ class ProcessOrchestrator:
                         message=f"执行异常: {e}",
                     )
                     module.on_error(context, e)
+                    # 通知模块失败
+                    self._report_status(module_name, "failed")
 
                     # 关键模块失败 → 整体失败
                     if isinstance(e, CriticalError):
@@ -120,9 +131,12 @@ class ProcessOrchestrator:
                     f"========== 完成模块 {module_name}，耗时 {elapsed_ms}ms =========="
                 )
 
-                # 3. 更新进度
+                # 通知模块完成
+                self._report_status(module_name, "completed")
+
+                # 3. 更新进度（包含耗时）
                 completed_weight += module.get_progress_weight()
-                self._report_progress(module_name, completed_weight)
+                self._report_progress(module_name, completed_weight, elapsed_ms)
 
             # 4. 全流程完成
             context.status = "completed"
@@ -161,8 +175,13 @@ class ProcessOrchestrator:
 
         return context
 
-    def _report_progress(self, module_name: str, completed_weight: int):
+    def _report_progress(self, module_name: str, completed_weight: int, duration_ms: int = None):
         """向回调函数报告进度"""
         if self.progress_callback:
             percent = min(int(completed_weight / self._total_weight * 100), 99)
-            self.progress_callback(module_name, percent)
+            self.progress_callback(module_name, percent, duration_ms)
+
+    def _report_status(self, module_name: str, status: str):
+        """向回调函数报告模块状态"""
+        if self.status_callback:
+            self.status_callback(module_name, status)

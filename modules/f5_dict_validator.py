@@ -45,7 +45,9 @@ class DictValidatorModule(BaseModule):
 
         检查项：
         1. dict_loader 是否已初始化（F4 已执行）
-        2. 一线名单 DataFrame 中是否存在 _Code 列（F4 上码结果）
+        2. 一线名单 DataFrame 是否存在
+        3. 一线名单是否为非空
+        4. 一线名单中是否存在 _Code 列（F4 上码结果）
 
         Returns
         -------
@@ -57,23 +59,21 @@ class DictValidatorModule(BaseModule):
             logger.warning("[F5] 前置检查未通过：dict_loader 未初始化")
             return False, "请先执行 F4 字典上码（数据字典加载失败）"
 
-        # ── 检查2：一线名单是否存在 _Code 列（F4 上码结果）──────
+        # ── 检查2：一线名单是否存在 ────────────────────────────────
         df_yixian = context.get_dataframe("yixian")
-        if df_yixian is None:        
+        if df_yixian is None:
             logger.warning("[F5] 前置检查未通过：一线名单 DataFrame 不存在")
             return False, "请先执行 F1 文件加载"
-        
+
+        # ── 检查3：一线名单是否为非空 ─────────────────────────────
         if df_yixian.is_empty():
             logger.warning("[F5] 前置检查未通过：一线名单 DataFrame 为空")
             return False, "请先执行 F1 文件加载或检查数据"
 
-        # 查找是否存在 _Code 列（F4 上码后会产生此列）
+        # ── 检查4：是否存在 _Code 列（F4 上码结果）─────────────
         code_columns = [col for col in df_yixian.columns if col.endswith("_Code")]
         if not code_columns:
-            logger.warning(
-                f"[F5] 前置检查未通过：一线名单中未找到 _Code 列，"
-                f"当前列={df_yixian.columns}"
-            )
+            logger.warning(f"[F5] 前置检查未通过：一线名单中未找到 _Code 列")
             return False, "请先执行 F4 字典上码"
 
         logger.info(f"[F5] 前置检查通过：发现 {len(code_columns)} 个 _Code 列")
@@ -116,8 +116,9 @@ class DictValidatorModule(BaseModule):
 
         total_invalid = 0
         all_invalid_records = []
+        total_columns = len(code_columns)  # [方案C] 动态总列数
 
-        for code_col in code_columns:
+        for idx, code_col in enumerate(code_columns):
             # 识别未匹配的字段（_Code 列值 = "未匹配"）
             invalid_df = df_yixian.filter(pl.col(code_col) == UNMATCHED_PLACEHOLDER)
 
@@ -148,6 +149,10 @@ class DictValidatorModule(BaseModule):
                 )
 
             total_invalid += len(invalid_df)
+
+            # [方案C] 动态分片进度：每处理完一列报告一次进度
+            col_progress = int((idx + 1) / total_columns * 100)
+            self._report_progress(col_progress)
 
         # ── 汇总处理结果 ──────────────────────────────────────────
         if all_invalid_records:

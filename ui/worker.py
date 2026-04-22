@@ -34,10 +34,12 @@ class ProcessingWorker(QThread):
     """
 
     # 信号定义
-    progress_updated = pyqtSignal(str, int)      # (模块名, 百分比)
-    status_changed = pyqtSignal(str)            # 状态文本
-    finished = pyqtSignal(object, bool, str)     # (context, success, error)
-    log_message = pyqtSignal(str, str)           # (level, message)
+    # 注意：第三个参数使用 object 类型以支持 None 值（子任务进度回调时 duration_ms=None）
+    progress_updated = pyqtSignal(str, int, object)      # (模块名, 百分比, 耗时毫秒/None)
+    module_status_updated = pyqtSignal(str, str)      # (模块名, 状态)
+    status_changed = pyqtSignal(str)                  # 状态文本
+    finished = pyqtSignal(object, bool, str)          # (context, success, error)
+    log_message = pyqtSignal(str, str)                # (level, message)
 
     def __init__(
         self,
@@ -70,14 +72,28 @@ class ProcessingWorker(QThread):
         self._emit_log("INFO", f"处理流程启动 run_id={self.context.run_id}")
 
         try:
-            def on_progress(module_name: str, percent: int):
-                self.progress_updated.emit(module_name, percent)
-                self.status_changed.emit(f"正在处理: {module_name} ({percent}%)")
+            def on_progress(module_name: str, percent: int, duration_ms: int = None):
+                # [DEBUG] 日志
+                logger.debug(f"[Worker.on_progress] module={module_name}, percent={percent}, duration_ms={duration_ms}")
+                # [FIX] duration_ms=None 时传入 None 而非 0，确保 progress_panel 正确区分子任务进度和完成回调
+                self.progress_updated.emit(module_name, percent, duration_ms if duration_ms is not None else None)
+                if duration_ms is not None and percent == 100:
+                    if duration_ms >= 1000:
+                        duration_text = f"{duration_ms / 1000:.1f}秒"
+                    else:
+                        duration_text = f"{duration_ms}毫秒"
+                    self.status_changed.emit(f"正在处理: {module_name} (完成, 耗时{duration_text})")
+                else:
+                    self.status_changed.emit(f"正在处理: {module_name} ({percent}%)")
+
+            def on_status(module_name: str, status: str):
+                self.module_status_updated.emit(module_name, status)
 
             # 创建编排器
             self.orchestrator = ProcessOrchestrator(
                 modules=self.modules,
                 progress_callback=on_progress,
+                status_callback=on_status,
             )
 
             # 执行流程

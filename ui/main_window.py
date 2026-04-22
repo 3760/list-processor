@@ -960,12 +960,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 20, 16, 12)  # 区块内边距
         layout.setSpacing(8)
 
-        # 状态标签
-        self.lbl_module = QLabel("等待处理...")
-        self.lbl_module.setStyleSheet("color: #6B7280; font-size: 12px;")
-        layout.addWidget(self.lbl_module)
-
-        # 使用 ProgressPanel
+        # 使用 ProgressPanel（包含进度条+阶段提示，已合并重复显示）
         self.progress_panel = ProgressPanel()
         layout.addWidget(self.progress_panel)
 
@@ -2352,6 +2347,7 @@ class MainWindow(QMainWindow):
         self.btn_cancel.setEnabled(True)
         self.progress_container.setVisible(True)
         self.result_banner.setVisible(False)
+        self.progress_panel.reset()  # [FIX] 重置进度面板状态
         self.log_text.clear()
         self._log_message("INFO", "=" * 50)
         self._log_message("INFO", f"开始处理批次: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -2380,6 +2376,7 @@ class MainWindow(QMainWindow):
         )
         self.worker.finished.connect(self._on_processing_finished)
         self.worker.progress_updated.connect(self._on_progress_update)
+        self.worker.module_status_updated.connect(self._on_module_status_update)
 
         # 启动处理线程
         self.worker.start()
@@ -2436,10 +2433,13 @@ class MainWindow(QMainWindow):
 
         return modules
 
-    def _on_progress_update(self, module_name: str, percent: int):
+    def _on_progress_update(self, module_name: str, percent: int, duration_ms: int = None):
         """进度更新回调"""
-        self.lbl_module.setText(f"{module_name}... {percent}%")
-        self.progress_panel.on_progress(module_name, percent)
+        self.progress_panel.on_progress(module_name, percent, duration_ms)
+
+    def _on_module_status_update(self, module_name: str, status: str):
+        """模块状态更新回调"""
+        self.progress_panel.set_module_status(module_name, status)
 
     def _on_processing_finished(self, context: ProcessContext):
         """处理完成回调"""

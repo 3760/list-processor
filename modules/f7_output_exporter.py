@@ -54,28 +54,31 @@ def _create_cell_format(wb, bg_color: str = None) -> "xlsxwriter.Format":
     return wb.add_format(fmt_dict)
 
 
-def export_results(ctx: ProcessContext, output_path: str) -> Dict[str, str]:
+def export_results(ctx: ProcessContext, output_path: str, progress_callback=None) -> Dict[str, str]:
     """
     将处理结果输出为 3 个独立 Excel 文件（PRD 附录 B 对齐）。
-    
+
     [20260420-老谈] ISSUE-03+04 重构：
       原：单个多 Sheet xlsx（一线/三方/HW 各一个 Sheet）
       新：3 个独立 xlsx 文件，每个含该名单的处理摘要 + 数据 + 错误 + 去重
-    
+
     输出文件命名（PRD 附录 B + ISSUE-04 原文件名前缀）：
       - 一线：{原文件名}_一线名单_处理结果_{时间戳}.xlsx  （5 个 Sheet）
       - 三方：{原文件名}_三方系统名单_处理结果_{时间戳}.xlsx （1 个 Sheet）
       - HW：  {原文件名}_HW系统名单_处理结果_{时间戳}.xlsx   （2 个 Sheet）
-    
+
     [20260420-老谈] 优化：输出到日期时间子文件夹，便于批次管理
-    
+    [方案C] 支持 progress_callback 用于子任务进度报告
+
     Parameters
     ----------
     ctx : ProcessContext
         包含 dataframes / error_records / module_results / summary
     output_path : str
         输出目录路径
-        
+    progress_callback : callable, optional
+        进度回调函数，签名为 (percent: int) -> None
+
     Returns
     -------
     Dict[str, str]
@@ -135,7 +138,7 @@ def export_results(ctx: ProcessContext, output_path: str) -> Dict[str, str]:
         wb = xlsxwriter.Workbook(file_path)
         try:
             # 写入各 Sheet
-            _write_single_source_sheets(wb, ctx, source_key, config["label"])
+            _write_single_source_sheets(wb, ctx, source_key, config["label"], progress_callback)
             # [PERF] close() 会将缓冲数据一次性写入磁盘
             wb.close()
             output_paths[source_key] = file_path
@@ -149,41 +152,52 @@ def export_results(ctx: ProcessContext, output_path: str) -> Dict[str, str]:
 
 
 def _write_single_source_sheets(
-    wb, ctx: ProcessContext, source_key: str, label: str
+    wb, ctx: ProcessContext, source_key: str, label: str, progress_callback=None
 ) -> None:
     """
     为单一名单写入所有 Sheet（使用 xlsxwriter 高效写入）。
-    
+
     [20260420-老谈] ISSUE-03: 从原来的统一多 Sheet 改为按名单拆分
     [PERF] 20260422: 使用 xlsxwriter 替代 openpyxl
+    [方案C] 支持 progress_callback 用于子任务进度报告
     """
     df = ctx.get_dataframe(source_key)
     row_count = len(df) if df is not None else 0
-    
+
     # [LOG] 记录开始写入该名单的所有 Sheet
     logger.info(f"[F7] ▶ 开始写入 {label} 的各 Sheet，数据行数：{row_count}")
-    
+
     # 1. 处理摘要 Sheet
     _write_summary_sheet_for_source(wb, ctx, source_key, label, df)
     logger.debug(f"[F7]   ✓ 处理摘要 Sheet 完成")
+    if progress_callback:
+        progress_callback("F7", 20)  # [方案C] 子任务进度
 
     # 2. 数据 Sheet（仅合规通过的数据）[FIX PRD 附录B] 统一使用"原始数据"
     _write_data_sheet(wb, "原始数据", df)
     logger.debug(f"[F7]   ✓ 原始数据 Sheet 完成，{row_count} 行")
-    
+    if progress_callback:
+        progress_callback("F7", 60)  # [方案C] 子任务进度
+
     # 3. 合规性检查结果 Sheet（仅本来源的错误）
     _write_error_records_sheet_for_source(wb, ctx, source_key)
-    
+    if progress_callback:
+        progress_callback("F7", 75)  # [方案C] 子任务进度
+
     # 4. 字典校验结果 Sheet（如有）—— 仅一线有此 Sheet
     dict_err = ctx.error_records.get("dict_validation")
     if source_key == "yixian" and dict_err is not None and len(dict_err) > 0:
         _write_dict_validation_sheet(wb, dict_err)
         logger.debug(f"[F7]   ✓ 字典校验结果 Sheet 完成，{len(dict_err)} 行")
-    
+        if progress_callback:
+            progress_callback("F7", 85)  # [方案C] 子任务进度
+
     # 5. 重复名单结果 Sheet —— 仅一线有此 Sheet
     if source_key == "yixian":
         _write_repeat_records_sheet_for_source(wb, ctx)
-    
+        if progress_callback:
+            progress_callback("F7", 100)  # [方案C] 子任务进度
+
     logger.info(f"[F7] ▶ {label} 的所有 Sheet 写入完成")
 
 
@@ -747,8 +761,11 @@ class OutputExporterModule(BaseModule):
             else:
                 output_dir = os.getcwd()
 
+        # [方案C] 获取进度回调
+        progress_callback = getattr(self, '_progress_callback', None)
+
         # export_results 现在返回 Dict[source_key -> file_path]
-        result_paths = export_results(ctx=context, output_path=output_dir)
+        result_paths = export_results(ctx=context, output_path=output_dir, progress_callback=progress_callback)
         
         # 将结果存入 context：主路径指向一线文件（兼容旧逻辑）
         if result_paths:

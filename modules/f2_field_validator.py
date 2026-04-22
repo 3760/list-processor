@@ -140,6 +140,7 @@ class FieldValidatorModule(BaseModule):
                 logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}")
             if len(required_errors) > 10:
                 logger.info(f"      └─ ... 还有 {len(required_errors) - 10} 条错误")
+        self._report_progress(25)  # [方案C] 子任务进度
 
         # ── F2-02: 数据类型检查 ─────────────────────────────────
         type_errors = self._check_data_types(df_yixian, fields_def)
@@ -151,6 +152,7 @@ class FieldValidatorModule(BaseModule):
                 logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}，实际值={err.get('原始值', '')}")
             if len(type_errors) > 10:
                 logger.info(f"      └─ ... 还有 {len(type_errors) - 10} 条错误")
+        self._report_progress(50)  # [方案C] 子任务进度
 
         # ── F2-03: 长度上限检查 ─────────────────────────────────
         length_errors = self._check_max_length(df_yixian, fields_def)
@@ -162,6 +164,7 @@ class FieldValidatorModule(BaseModule):
                 logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}，实际值={err.get('原始值', '')}")
             if len(length_errors) > 10:
                 logger.info(f"      └─ ... 还有 {len(length_errors) - 10} 条错误")
+        self._report_progress(75)  # [方案C] 子任务进度
 
         # ── F2-04: 正则规则检查 ─────────────────────────────────
         regex_errors = self._check_regex_rules(df_yixian, fields_def)
@@ -173,6 +176,7 @@ class FieldValidatorModule(BaseModule):
                 logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}，实际值={err.get('原始值', '')}")
             if len(regex_errors) > 10:
                 logger.info(f"      └─ ... 还有 {len(regex_errors) - 10} 条错误")
+        self._report_progress(100)  # [方案C] 子任务进度
 
         # ── 汇总处理结果 ──────────────────────────────────────────
         total_errors = len(all_errors)

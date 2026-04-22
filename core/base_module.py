@@ -3,10 +3,14 @@
 
 所有 F1~F7 业务模块均继承 BaseModule，
 统一实现 execute / validate / get_module_name 接口。
+
+[方案C] 子任务进度机制：
+- Orchestrator 负责主进度条（0%→100%）
+- 模块内部通过 _report_progress() 报告子任务细节进度
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
 import polars as pl
 
@@ -78,6 +82,23 @@ class BaseModule(ABC):
         子类可覆盖，默认返回 10（所有模块等权重）。
         """
         return 10
+
+    def _report_progress(self, percent: int) -> None:
+        """
+        [方案C] 报告子任务进度。
+
+        由 Orchestrator 在 execute() 调用前注入 _progress_callback，
+        模块内部在关键阶段调用此方法更新子任务进度。
+
+        Parameters
+        ----------
+        percent : int
+            当前进度百分比（0~100），会被追加到模块名下显示
+        """
+        callback: Optional[Callable] = getattr(self, '_progress_callback', None)
+        if callback:
+            module_name = self.get_module_name()
+            callback(module_name, percent)
 
     def on_error(self, context: ProcessContext, error: Exception):
         """

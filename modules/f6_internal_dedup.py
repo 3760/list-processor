@@ -49,6 +49,7 @@ class InternalDedupModule(BaseModule):
         检查项：
         1. 一线名单 DataFrame 是否存在
         2. 去重字段（dedup_field）是否已设置
+        3. 去重字段是否存在于 DataFrame
 
         Returns
         -------
@@ -139,6 +140,7 @@ class InternalDedupModule(BaseModule):
             df.group_by(dedup_field, maintain_order=True)
               .agg(pl.col("__row_index__").min().alias("__first_row__"))
         )
+        self._report_progress(20)  # [方案C] 子任务进度
 
         # 步骤3：计算每组大小（合并 group_by + len + join 为两次 join）
         group_size = (
@@ -146,10 +148,12 @@ class InternalDedupModule(BaseModule):
               .len()
               .rename({"len": "_出现次数"})
         )
+        self._report_progress(40)  # [方案C] 子任务进度
 
         # 步骤4：合并信息（两次 left join）
         df = df.join(first_in_group, on=dedup_field, how="left")
         df = df.join(group_size, on=dedup_field, how="left")
+        self._report_progress(60)  # [方案C] 子任务进度
 
         # 步骤5：一次性向量化标注（减少 with_columns 调用次数）
         # [PERF] 用 row_index == first_row 判断是否是组内第一个
@@ -178,6 +182,7 @@ class InternalDedupModule(BaseModule):
               .otherwise(pl.lit(REPEAT_VALUE))
               .alias("_重复标记"),
         )
+        self._report_progress(100)  # [方案C] 子任务进度
 
         # 步骤6：恢复原始 dedup_field 值（移除 __NULL_VALUE__ 标记）
         df_final = df.with_columns(

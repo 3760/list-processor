@@ -135,12 +135,14 @@ class PriorityDedupModule(BaseModule):
             sanfang_in_yixian = df_sanfang.filter(pl.col(COL_YIXIAN_FLAG) == YES_VALUE).height
             total_sanfang = len(df_sanfang)
             logger.info(f"[F3] 三方名单：{total_sanfang} 行，其中 {sanfang_in_yixian} 条在一线名单中")
+        self._report_progress(33)  # [方案C] 子任务进度
 
         # ── F3-02/F3-03: HW vs 一线/HW vs 三方标注 ───────────
         df_hw = context.get_dataframe("hw")
         if df_hw is not None and dedup_field in df_hw.columns:
             # F3-02: HW vs 一线
             df_hw = self._annotate_in_set(df_hw, dedup_field, yixian_keys, COL_YIXIAN_FLAG)
+            self._report_progress(66)  # [方案C] 子任务进度
 
             # F3-03: HW vs 三方
             if df_sanfang is not None:
@@ -152,6 +154,7 @@ class PriorityDedupModule(BaseModule):
             hw_in_yixian = df_hw.filter(pl.col(COL_YIXIAN_FLAG) == YES_VALUE).height
             total_hw = len(df_hw)
             logger.info(f"[F3] HW名单：{total_hw} 行，其中 {hw_in_yixian} 条在一线名单，{hw_in_sanfang} 条在三方名单")
+        self._report_progress(100)  # [方案C] 子任务进度
 
         # ── 记录模块结果 ──────────────────────────────────────────
         context.record_module_result(

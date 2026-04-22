@@ -150,8 +150,9 @@ class DictEncoderModule(BaseModule):
         total_matched = 0
         total_unmatched = 0
         stats_by_field = {}
+        total_fields = len(dict_type_fields)  # [方案C] 动态总字段数
 
-        for field_name, dict_id in dict_type_fields:
+        for idx, (field_name, dict_id) in enumerate(dict_type_fields):
             # 检查字典是否存在
             if dict_id not in dict_loader.mappings:
                 logger.warning(f"[F4] 字典 '{dict_id}' 在数据字典文件中未找到")
@@ -225,6 +226,10 @@ class DictEncoderModule(BaseModule):
                 f"匹配 {matched_count}, 未匹配 {unmatched_count}, "
                 f"匹配率 {stats_by_field[field_name]['match_rate']}"
             )
+
+            # [方案C] 动态分片进度：每处理完一个字段报告一次进度
+            field_progress = int((idx + 1) / total_fields * 100)
+            self._report_progress(field_progress)
 
         # ── 更新上下文 ──────────────────────────────────────────
         context.set_dataframe("yixian", df_yixian)
