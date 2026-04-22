@@ -21,6 +21,9 @@ from infra.log_manager import get_logger
 
 logger = get_logger(__name__)
 
+# 字典校验常量
+UNMATCHED_PLACEHOLDER = "未匹配"  # 与 F4 保持一致
+
 
 class DictValidatorModule(BaseModule):
     """
@@ -56,9 +59,13 @@ class DictValidatorModule(BaseModule):
 
         # ── 检查2：一线名单是否存在 _Code 列（F4 上码结果）──────
         df_yixian = context.get_dataframe("yixian")
-        if df_yixian is None:
+        if df_yixian is None:        
             logger.warning("[F5] 前置检查未通过：一线名单 DataFrame 不存在")
             return False, "请先执行 F1 文件加载"
+        
+        if df_yixian.is_empty():
+            logger.warning("[F5] 前置检查未通过：一线名单 DataFrame 为空")
+            return False, "请先执行 F1 文件加载或检查数据"
 
         # 查找是否存在 _Code 列（F4 上码后会产生此列）
         code_columns = [col for col in df_yixian.columns if col.endswith("_Code")]
@@ -91,7 +98,7 @@ class DictValidatorModule(BaseModule):
         -------
         ProcessContext
         """
-        logger.info("[F5] 开始字典值合规校验")
+        logger.info("[F5] 开始字典值校验")
 
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None:
@@ -112,7 +119,7 @@ class DictValidatorModule(BaseModule):
 
         for code_col in code_columns:
             # 识别未匹配的字段（_Code 列值 = "未匹配"）
-            invalid_df = df_yixian.filter(pl.col(code_col) == "未匹配")
+            invalid_df = df_yixian.filter(pl.col(code_col) == UNMATCHED_PLACEHOLDER)
 
             if len(invalid_df) > 0:
                 # 提取原始字段名（去掉 "_Code" 后缀）
@@ -121,14 +128,18 @@ class DictValidatorModule(BaseModule):
                 # 获取原始值列
                 original_value_col = original_field if original_field in df_yixian.columns else None
 
+                # [FIX #5] 安全检查：确保 original_value_col 不为 None
+                value_key = original_value_col if original_value_col else ""
+
                 # [FIX] 使用正确的行号列（优先使用_行号，其次_row_num）
                 for row in invalid_df.iter_rows(named=True):
+                    original_value = row.get(value_key, "") if value_key else ""
                     record = {
                         "字段名": original_field,
                         "行号": row.get("_行号", row.get("_row_num", 0)),
-                        "原始值": row.get(original_value_col, ""),
+                        "原始值": original_value,
                         "问题类型": "DICT_NOT_FOUND",
-                        "说明": f"值 '{row.get(original_value_col, '')}' 在数据字典中不存在",
+                        "说明": f"值 '{original_value}' 在数据字典中不存在",
                     }
                     all_invalid_records.append(record)
 
@@ -145,11 +156,11 @@ class DictValidatorModule(BaseModule):
             # [20260420-老谈] ISSUE-06: 使用独立 key "dict_validation"，避免覆盖 F2 的 error_records["yixian"]
             context.error_records["dict_validation"] = error_df
             logger.info(
-                f"[F5] 合规校验完成：{total_invalid} 条不合规记录，"
+                f"[F5] 校验完成：{total_invalid} 条不合规记录，"
                 f"已输出至「字典校验结果」Sheet"
             )
         else:
-            logger.info("[F5] 合规校验完成：所有数据均合规")
+            logger.info("[F5] 校验完成：所有数据均合规")
 
         # ── 记录模块结果 ──────────────────────────────────────────
         context.record_module_result(

@@ -18,13 +18,6 @@ from core.base_module import BaseModule
 
 logger = get_logger(__name__)
 
-# 名单类型映射（UI显示名 → 内部键）
-LIST_TYPE_MAP = {
-    "一线": "yixian",
-    "三方": "sanfang",
-    "hw": "hw",
-}
-
 
 def _detect_csv_encoding(file_path: str) -> str:
     """
@@ -43,13 +36,13 @@ def _detect_csv_encoding(file_path: str) -> str:
                 return "utf-8-sig"
             # 尝试解码验证
             raw_bytes.decode(encoding)
-            logger.debug(f"CSV编码检测成功: {encoding}")
+            logger.debug(f"CSV编码检测成功：{encoding}")
             return encoding
         except (UnicodeDecodeError, LookupError):
             continue
     
     # 默认返回 UTF-8（兜底）
-    logger.warning(f"CSV编码检测失败，使用默认编码: utf-8")
+    logger.warning(f"CSV编码检测失败，使用默认编码：utf-8")
     return "utf-8"
 
 
@@ -114,8 +107,7 @@ def load_files(
         try:
             pre_selected_sheet = sheet_selections.get(list_type)
             df = _load_single_file(file_path, list_type, pre_selected_sheet)
-            internal_key = LIST_TYPE_MAP.get(list_type, list_type)
-            ctx.set_dataframe(internal_key, df)
+            ctx.set_dataframe(list_type, df)
             ctx.record_module_result(
                 module="F1",
                 success_count=len(df),
@@ -128,7 +120,7 @@ def load_files(
             if progress_callback:
                 progress_callback(f"F1_{list_type}", int((i + 1) / total_files * F1_WEIGHT))
 
-        except Exception as e:
+        except (DataQualityError, OSError, PermissionError) as e:
             logger.error(f"  [{list_type}] 加载失败: {e}")
             ctx.record_module_result(
                 module="F1",
@@ -180,7 +172,7 @@ def _load_single_file(
         # 编码探测
         encoding = _detect_csv_encoding(file_path)
         df = pl.read_csv(file_path, encoding=encoding)
-        logger.info(f"  [{list_type}] CSV文件已读取 (encoding: {encoding})")
+        logger.info(f"  [{list_type}] CSV文件已读取（encoding: {encoding}）")
         if df.is_empty():
             raise DataQualityError(f"[{list_type}] 文件为空: {file_path}")
         # 添加来源列
@@ -231,27 +223,17 @@ class FileLoaderModule(BaseModule):
     def execute(self, context: ProcessContext) -> ProcessContext:
         """执行文件加载 + 字段规范 + 数据字典 + 去重字段识别"""
         # ── Step 1：加载三类名单 Excel → DataFrame ──
-        reverse_map = {v: k for k, v in LIST_TYPE_MAP.items()}
+        # 直接使用内部键：yixian, sanfang, hw
         file_paths = {}
         for internal_key in ["yixian", "sanfang", "hw"]:
             path = context.get_input_file(internal_key)
             if path:
-                display_name = reverse_map.get(internal_key, internal_key)
-                file_paths[display_name] = path
+                file_paths[internal_key] = path
 
-        # [20260420-老谈] ISSUE-09: 获取预选的 Sheet 名称
+        # [20260420-老谈] ISSUE-09: 获取预选的 Sheet 名称（UI已统一使用内部键）
         pre_selected_sheets = getattr(self, '_pre_selected_sheets', {})
-        # 映射：UI的file_type键 -> LIST_TYPE_MAP的键
-        sheet_key_map = {
-            "frontline": "yixian",
-            "third_party": "sanfang",
-            "hw": "hw",
-        }
-        # 构建 load_files 期望的 sheet_selections 格式
-        sheet_selections = {}
-        for ui_key, list_key in sheet_key_map.items():
-            if ui_key in pre_selected_sheets and pre_selected_sheets[ui_key]:
-                sheet_selections[list_key] = pre_selected_sheets[ui_key]
+        # 直接使用内部键，无需映射转换
+        sheet_selections = {k: v for k, v in pre_selected_sheets.items() if v}
 
         dedup_field = getattr(context, 'dedup_field', None)
         # 获取 orchestrator 传递的进度回调
@@ -281,7 +263,7 @@ class FileLoaderModule(BaseModule):
                         return context
                 context.field_spec = load_field_spec(spec_path)
                 logger.info(f"[F1] 字段规范已加载: {spec_path}")
-            except Exception as e:
+            except (yaml.YAMLError, OSError, PermissionError) as e:
                 import traceback
                 logger.warning(f"[F1] 字段规范加载失败（F2/F4 将跳过）: {e}")
                 logger.debug(f"[F1] 详细错误: {traceback.format_exc()}")
@@ -292,8 +274,8 @@ class FileLoaderModule(BaseModule):
             try:
                 from infra.dict_loader import DictLoader
                 context.dict_loader = DictLoader(dict_path)
-                logger.info(f"[F1] 数据字典已加载: {dict_path}, MD5={context.dict_loader.md5_hash}")
-            except Exception as e:
+                logger.info(f"[F1] 数据字典已加载：{dict_path}，MD5={context.dict_loader.md5_hash}")
+            except (DataQualityError, OSError, PermissionError) as e:
                 import traceback
                 logger.warning(f"[F1] 数据字典加载失败（F4/F5 将跳过）: {e}")
                 logger.warning(f"[F1] 请检查字典文件格式是否为「租户字典导入模版」格式")
@@ -424,6 +406,15 @@ class FileLoaderModule(BaseModule):
             # 写入 config/field_spec.yaml —— 字典格式（兼容 spec_loader.py）
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             yaml_path = os.path.join(base_dir, "config", "field_spec.yaml")
+            
+            # [FIX #8] 添加备份机制：写入前先备份现有文件
+            if os.path.exists(yaml_path):
+                backup_path = yaml_path + ".bak"
+                with open(yaml_path, "r", encoding="utf-8") as src:
+                    with open(backup_path, "w", encoding="utf-8") as dst:
+                        dst.write(src.read())
+                logger.info(f"[F1] 已备份原有配置: {backup_path}")
+            
             with open(yaml_path, "w", encoding="utf-8") as f:
                 yaml.dump({"fields": fields_dict}, f, allow_unicode=True, default_flow_style=False)
 
@@ -433,7 +424,7 @@ class FileLoaderModule(BaseModule):
             )
             return yaml_path
 
-        except Exception as e:
+        except (OSError, yaml.YAMLError, ValueError) as e:
             logger.error(f"[F1] xlsx→yaml 转换失败: {e}")
             return None
 
@@ -463,10 +454,10 @@ class FileLoaderModule(BaseModule):
                 defaults = cfg.get("deduplication", {}).get("yixian", [])
                 for candidate in defaults:
                     if candidate in yixian_df.columns:
-                        logger.info(f"[F1] 去重字段来自配置(第①级): {candidate}")
+                        logger.info(f"[F1] 去重字段来自配置（第①级）：{candidate}")
                         return candidate
-        except Exception as e:
-            logger.debug(f"[F1] 配置文件去重字段读取失败，降级到关键字匹配: {e}")
+        except (OSError, yaml.YAMLError) as e:
+            logger.debug(f"[F1] 配置文件去重字段读取失败，降级到关键字匹配：{e}")
 
         # 第②级：关键字模糊匹配
         keywords = ["email", "邮箱", "mail", "e-mail", "e_mail"]
@@ -474,7 +465,7 @@ class FileLoaderModule(BaseModule):
         for kw in keywords:
             for col, col_lc in zip(yixian_df.columns, cols_lower):
                 if kw in col_lc:
-                    logger.info(f"[F1] 去重字段关键字匹配(第②级): {col}")
+                    logger.info(f"[F1] 去重字段关键字匹配（第②级）：{col}")
                     return col
 
         return None

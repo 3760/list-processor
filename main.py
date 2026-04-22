@@ -76,7 +76,7 @@ def main():
         QMessageBox.critical(None, "关键错误", f"应用遇到关键错误，必须退出。\n\n{e}")
         sys.exit(1)
 
-    except Exception as e:
+    except (ProcessingError, RuntimeError, AttributeError) as e:
         logger.critical(f"未预期异常，应用终止: {e}", exc_info=True)
         QMessageBox.critical(None, "未预期错误", f"发生未预期的错误，请查看日志。\n\n{e}")
         sys.exit(1)

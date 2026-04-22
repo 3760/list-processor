@@ -42,7 +42,8 @@ class ProcessOrchestrator:
 
         self.modules = modules
         self.progress_callback = progress_callback
-        self._total_weight = sum(m.get_progress_weight() for m in modules)
+        total_weight = sum(m.get_progress_weight() for m in modules)
+        self._total_weight = total_weight if total_weight > 0 else 1  # [FIX #6] 防止零除错误
 
     def run(self, context: ProcessContext) -> ProcessContext:
         """
@@ -95,7 +96,7 @@ class ProcessOrchestrator:
                     # [优化] 将进度回调传递给模块，支持模块内部细化进度
                     module._progress_callback = self.progress_callback
                     context = module.execute(context)
-                except Exception as e:
+                except (ProcessingError, CriticalError, RuntimeError, AttributeError, TypeError) as e:
                     elapsed_ms = int((time.time() - start_time) * 1000)
                     logger.error(
                         f"模块 {module_name} 执行异常: {e}",
@@ -147,7 +148,7 @@ class ProcessOrchestrator:
             logger.critical(f"流程关键错误 run_id={run_id}: {e}")
             raise
 
-        except Exception as e:
+        except CriticalError:
             context.status = "failed"
             context.build_summary()
             ProcessingHistoryDAO.complete_run(
@@ -155,8 +156,8 @@ class ProcessOrchestrator:
                 status="failed",
                 summary=context.summary,
             )
-            logger.error(f"流程未预期错误 run_id={run_id}: {e}", exc_info=True)
-            raise ProcessingError(f"流程执行失败: {e}", module="Orchestrator") from e
+            logger.critical(f"流程关键错误 run_id={run_id}")
+            raise
 
         return context
 

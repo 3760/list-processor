@@ -47,15 +47,15 @@ class FileSelector(QWidget):
     file_changed = pyqtSignal(str, str)
     validation_changed = pyqtSignal(bool)
 
-    # 文件类型配置
+    # 文件类型配置（统一使用内部键: yixian, sanfang, hw）
     FILE_CONFIGS = {
-        "frontline": {
+        "yixian": {
             "label": "一线人员名单",
             "required": True,
             "filters": "Excel 文件 (*.xlsx *.xls);;CSV 文件 (*.csv);;所有文件 (*.*)",
             "hint": "必选",
         },
-        "third_party": {
+        "sanfang": {
             "label": "三方系统名单",
             "required": False,
             "filters": "Excel 文件 (*.xlsx *.xls);;CSV 文件 (*.csv);;所有文件 (*.*)",

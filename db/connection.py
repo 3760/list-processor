@@ -126,20 +126,25 @@ def get_cursor():
         with get_cursor() as cur:
             cur.execute("SELECT * FROM table")
             rows = cur.fetchall()
+    
+    Yields
+    ------
+    sqlite3.Cursor
+        数据库游标
     """
     conn = get_connection()
     cur = conn.cursor()
     try:
         yield cur
         conn.commit()
-    except Exception:
+    except sqlite3.Error:  # [FIX] 限定为数据库相关异常
         conn.rollback()
         raise
     finally:
         cur.close()
 
 
-def close_connection():
+def close_connection() -> None:
     """关闭数据库连接（通常在应用退出时调用）"""
     global _connection
     if _connection is not None:

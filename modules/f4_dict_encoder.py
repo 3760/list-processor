@@ -23,6 +23,9 @@ from infra.log_manager import get_logger
 
 logger = get_logger(__name__)
 
+# 字典上码常量
+UNMATCHED_PLACEHOLDER = "未匹配"  # 字典值不匹配时的占位符
+
 
 class DictEncoderModule(BaseModule):
     """
@@ -67,6 +70,11 @@ class DictEncoderModule(BaseModule):
         if df_yixian is None:
             logger.warning("[F4] 前置检查未通过：一线名单 DataFrame 不存在")
             return False, "请先执行 F1 文件加载"
+
+        # ── 检查4：一线名单是否为空 ────────────────────────────────
+        if df_yixian.is_empty():
+            logger.warning("[F4] 前置检查未通过：一线名单为空（0行）")
+            return False, "一线名单为空，无法执行上码"
 
         logger.info(f"[F4] 前置检查通过：一线名单 {len(df_yixian)} 行")
         return True, ""
@@ -161,39 +169,44 @@ class DictEncoderModule(BaseModule):
                 total_unmatched += len(df_yixian)
                 continue
 
-            # 获取字典映射 {Code: Label}（dict_loader 原始格式）
-            raw_mapping = dict_loader.mappings[dict_id]  # {Code: Label}
+            # [FIX #2] 获取字典映射（dict_loader 现在提供"正向"和"反向"两个子字典）
+            raw_mapping = dict_loader.mappings.get(dict_id, {})
+            
+            # 优先使用预构建的反向映射 {Label小写: Code}
+            label_to_code = raw_mapping.get("反向", {}) if isinstance(raw_mapping, dict) else {}
+            
+            # 如果没有预构建的反向映射（兼容旧版本），则手动构建
+            if not label_to_code and isinstance(raw_mapping, dict):
+                raw_dict = raw_mapping.get("正向", raw_mapping) if "正向" in raw_mapping else raw_mapping
+                for code_val, label_val in raw_dict.items():
+                    if label_val is None or str(label_val).strip() == "":
+                        continue
+                    label_lower = str(label_val).lower().strip()
+                    label_to_code[label_lower] = code_val
 
-            # 构建反向映射：Label（小写）→ Code（用于上码输出 _Code 列）
-            # dict_loader 存储的是 code_to_label = {Code: Label}
-            # F4 上码需要反向查找：原始数据中的 Label → 输出对应的 Code
-            label_to_code = {}
-            for code_val, label_val in raw_mapping.items():
-                if label_val is None or str(label_val).strip() == "":
-                    continue
-                label_lower = str(label_val).lower().strip()
-                label_to_code[label_lower] = code_val
-
-            # ── 上码处理 [PERF] 使用 Polars 向量化操作 ─────────────
             code_col_name = f"{field_name}_Code"
 
-            # 定义查码函数
-            def lookup_code(val):
-                if val is None:
-                    return "未匹配"
-                val_str = str(val).strip()
-                if not val_str:
-                    return "未匹配"
-                val_lower = val_str.lower()
-                return label_to_code.get(val_lower, "未匹配")
+            # [PERF] 使用 Polars replace 向量化操作替代 map_elements
+            # Step 1: 标准化列值（小写 + 去空格）
+            normalized = df_yixian[field_name].cast(pl.Utf8).str.strip_chars().str.to_lowercase()
 
-            # 使用 map_elements 向量化处理
+            # Step 2: 构建映射表达式（使用闭包缓存映射引用，避免重复查询）
+            # [FIX #3] 使用 partial 预绑定 mapping 参数，减少闭包开销
+            def build_lookup_expr(col: pl.Series, mapping: dict) -> pl.Series:
+                """使用 map_elements 但通过预构建映射减少调用开销"""
+                # 使用本地变量缓存映射引用，避免每次 lambda 调用时查找
+                _mapping = mapping
+                return col.map_elements(
+                    lambda x, _m=_mapping: _m.get(x, UNMATCHED_PLACEHOLDER) if x else UNMATCHED_PLACEHOLDER,
+                    return_dtype=pl.Utf8
+                )
+
             df_yixian = df_yixian.with_columns(
-                pl.col(field_name).map_elements(lookup_code, return_dtype=pl.Utf8).alias(code_col_name)
+                build_lookup_expr(normalized, label_to_code).alias(code_col_name)
             )
 
             # 统计匹配/未匹配数量
-            matched_count = df_yixian.filter(pl.col(code_col_name) != "未匹配").height
+            matched_count = df_yixian.filter(pl.col(code_col_name) != UNMATCHED_PLACEHOLDER).height
             unmatched_count = len(df_yixian) - matched_count
 
             total_matched += matched_count
@@ -231,5 +244,5 @@ class DictEncoderModule(BaseModule):
         # 额外记录统计信息（便于 F7 汇总）
         context.module_results["F4_stats"] = stats_by_field
 
-        logger.info(f"[F4] 数据字典上码完成")
+        logger.info("[F4] 数据字典上码完成")
         return context

@@ -10,7 +10,7 @@
 
 import os
 import yaml
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import openpyxl
 
@@ -18,6 +18,9 @@ from infra.exceptions import ValidationError, DataQualityError
 from infra.log_manager import get_logger
 
 logger = get_logger(__name__)
+
+# 魔法字符串常量
+_NOT_REQUIRED_VALUES = frozenset({"否", "允许空", "n", "no", "0"})  # 表示非必填的值
 
 
 def import_field_spec(excel_path: str, output_path: str = None) -> Dict[str, Any]:
@@ -44,7 +47,7 @@ def import_field_spec(excel_path: str, output_path: str = None) -> Dict[str, Any
 
     try:
         workbook = openpyxl.load_workbook(excel_path, data_only=True)
-    except Exception as e:
+    except (OSError, IOError) as e:
         raise DataQualityError(
             f"无法打开 Excel 文件: {e}",
             field="excel_path",
@@ -105,7 +108,7 @@ def _parse_column_map(headers: List) -> Dict[str, int]:
     - 数据类型
     - 值域（允许值列表）
     """
-    col_map = {}
+    col_map: Dict[str, int] = {}
     for idx, header in enumerate(headers):
         if header is None:
             continue
@@ -133,7 +136,7 @@ def _parse_column_map(headers: List) -> Dict[str, int]:
     return col_map
 
 
-def _parse_field_row(row: tuple, col_map: Dict[str, int]) -> Dict[str, Any]:
+def _parse_field_row(row: tuple, col_map: Dict[str, int]) -> Optional[Dict[str, Any]]:
     """解析单行字段定义"""
     field_name = str(row[col_map["field_name"]]).strip()
     attr_code = str(row[col_map["attr_code"]]).strip()
@@ -153,7 +156,7 @@ def _parse_field_row(row: tuple, col_map: Dict[str, int]) -> Dict[str, Any]:
         val = row[col_map["required"]]
         if val is not None:
             val_str = str(val).strip().lower()
-            field_def["required"] = val_str not in ("否", "允许空", "n", "no", "0")
+            field_def["required"] = val_str not in _NOT_REQUIRED_VALUES
 
     # 数据类型
     if "data_type" in col_map:

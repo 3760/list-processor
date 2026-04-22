@@ -106,20 +106,12 @@ def run_f1(ctx):
         from infra.dict_loader import DictLoader
         ctx.dict_loader = DictLoader(dict_path)
     
-    # 加载文件 - 使用小写key匹配LIST_TYPE_MAP
+    # 加载文件 - 统一使用内部键: yixian, sanfang, hw
     file_paths = {}
-    
-    for list_type in ["一线", "三方", "HW"]:
-        path = ctx.get_input_file(list_type.lower())
-        if not path:
-            path = ctx.get_input_file(list_type)
+    for list_type in ["yixian", "sanfang", "hw"]:
+        path = ctx.get_input_file(list_type)
         if path:
-            # LIST_TYPE_MAP使用小写key
-            if list_type.lower() in ["一线", "三方"]:
-                key = list_type  # "一线" -> "一线"
-            else:
-                key = "hw"  # "HW" -> "hw"
-            file_paths[key] = path
+            file_paths[list_type] = path
     
     from modules.f1_loader import load_files
     ctx = load_files(ctx, file_paths, dedup_field=ctx.dedup_field)

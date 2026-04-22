@@ -92,7 +92,7 @@ class FieldValidatorModule(BaseModule):
         -------
         ProcessContext
         """
-        logger.info("[F2] 开始字段合规性检查")
+        logger.info("[F2] 开始字段合规性校验")
 
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None or df_yixian.is_empty():
@@ -105,40 +105,74 @@ class FieldValidatorModule(BaseModule):
             )
             return context
 
+        # [DEBUG] 输出数据概览
+        total_rows = len(df_yixian)
+        df_columns = df_yixian.columns
+        logger.info(f"[F2] 数据概览：一线名单 {total_rows} 行，{len(df_columns)} 列")
+        logger.info(f"[F2] 数据列名：{df_columns}")
+
         # 获取字段规范
         field_spec = context.field_spec
         fields_def = field_spec.get("fields", {})
 
+        # [DEBUG] 输出字段规范概览
+        required_fields = [
+            fn for fn, fv in fields_def.items()
+            if isinstance(fv, dict) and (
+                fv.get("required") is True or
+                (isinstance(fv.get("required"), str) and fv.get("required", "").strip() == "是")
+            )
+        ]
+        logger.info(f"[F2] 字段规范：共 {len(fields_def)} 个字段定义，{len(required_fields)} 个必填字段")
+        logger.info(f"[F2] 必填字段列表：{required_fields}")
+
         # 收集所有错误记录
         all_errors: List[Dict[str, Any]] = []
-
-        # 统计数据
-        total_rows = len(df_yixian)
         error_row_ids = set()  # 记录有错误的行号
 
         # ── F2-01: 必填字段检查 ──────────────────────────────────
         required_errors = self._check_required_fields(df_yixian, fields_def)
         all_errors.extend(required_errors)
         error_row_ids.update(e["行号"] for e in required_errors)
-        logger.info(f"[F2] 必填字段检查：{len(required_errors)} 条错误")
+        logger.info(f"[F2] 必填字段校验：{len(required_errors)} 条错误")
+        if required_errors:
+            for err in required_errors[:10]:
+                logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}")
+            if len(required_errors) > 10:
+                logger.info(f"      └─ ... 还有 {len(required_errors) - 10} 条错误")
 
         # ── F2-02: 数据类型检查 ─────────────────────────────────
         type_errors = self._check_data_types(df_yixian, fields_def)
         all_errors.extend(type_errors)
         error_row_ids.update(e["行号"] for e in type_errors)
-        logger.info(f"[F2] 数据类型检查：{len(type_errors)} 条错误")
+        logger.info(f"[F2] 数据类型校验：{len(type_errors)} 条错误")
+        if type_errors:
+            for err in type_errors[:10]:
+                logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}，实际值={err.get('原始值', '')}")
+            if len(type_errors) > 10:
+                logger.info(f"      └─ ... 还有 {len(type_errors) - 10} 条错误")
 
         # ── F2-03: 长度上限检查 ─────────────────────────────────
         length_errors = self._check_max_length(df_yixian, fields_def)
         all_errors.extend(length_errors)
         error_row_ids.update(e["行号"] for e in length_errors)
-        logger.info(f"[F2] 长度上限检查：{len(length_errors)} 条错误")
+        logger.info(f"[F2] 长度上限校验：{len(length_errors)} 条错误")
+        if length_errors:
+            for err in length_errors[:10]:
+                logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}，实际值={err.get('原始值', '')}")
+            if len(length_errors) > 10:
+                logger.info(f"      └─ ... 还有 {len(length_errors) - 10} 条错误")
 
         # ── F2-04: 正则规则检查 ─────────────────────────────────
         regex_errors = self._check_regex_rules(df_yixian, fields_def)
         all_errors.extend(regex_errors)
         error_row_ids.update(e["行号"] for e in regex_errors)
-        logger.info(f"[F2] 正则规则检查：{len(regex_errors)} 条错误")
+        logger.info(f"[F2] 正则规则校验：{len(regex_errors)} 条错误")
+        if regex_errors:
+            for err in regex_errors[:10]:
+                logger.info(f"      └─ [{err['字段名']}] 行{err['行号']}: {err['说明']}，实际值={err.get('原始值', '')}")
+            if len(regex_errors) > 10:
+                logger.info(f"      └─ ... 还有 {len(regex_errors) - 10} 条错误")
 
         # ── 汇总处理结果 ──────────────────────────────────────────
         total_errors = len(all_errors)
@@ -149,19 +183,26 @@ class FieldValidatorModule(BaseModule):
             error_df = pl.DataFrame(all_errors)
             context.error_records["yixian"] = error_df
 
+            # [DEBUG] 输出前20条错误详情（INFO级别，便于排查）
+            logger.info(f"[F2] === 错误详情（前20条）===")
+            for i, err in enumerate(all_errors[:20], 1):
+                logger.info(f"     [{i:02d}] 字段={err['字段名']}, 行号={err['行号']}, 问题={err['问题类型']}, 说明={err['说明']}")
+                if '原始值' in err and err['原始值'] not in ("(空值)", "(字段缺失)"):
+                    logger.info(f"          原始值={err['原始值']}")
+            if len(all_errors) > 20:
+                logger.info(f"     ... 还有 {len(all_errors) - 20} 条错误")
+
             # 构建错误类型分布统计
             error_type_counts: Dict[str, int] = {}
             for e in all_errors:
                 error_type = e.get("问题类型", "UNKNOWN")
                 error_type_counts[error_type] = error_type_counts.get(error_type, 0) + 1
 
-            logger.info(
-                f"[F2] 合规性检查完成：{total_errors} 条错误，"
-                f"涉及 {error_row_count} 行，已输出至「合规性检查结果」Sheet"
-            )
-            logger.debug(f"[F2] 错误类型分布：{error_type_counts}")
+            logger.info(f"[F2] 校验完成：{total_errors} 条错误")
+            logger.info(f"     涉及 {error_row_count} 行，已输出至「合规性检查结果」Sheet")
+            logger.info(f"     错误类型分布：{error_type_counts}")
         else:
-            logger.info("[F2] 合规性检查完成：所有数据均合规")
+            logger.info("[F2] 校验完成：所有数据均合规")
 
         # ── 记录模块结果（F2-06）─────────────────────────────────
         context.record_module_result(
@@ -220,6 +261,17 @@ class FieldValidatorModule(BaseModule):
             错误记录列表
         """
         errors = []
+        total_rows = len(df)
+
+        # 统计必填字段数量
+        required_fields = [
+            fn for fn, fv in fields_def.items()
+            if isinstance(fv, dict) and (
+                fv.get("required") is True or
+                (isinstance(fv.get("required"), str) and fv.get("required", "").strip() == "是")
+            )
+        ]
+        logger.debug(f"[_check_required_fields] 必填字段共 {len(required_fields)} 个: {required_fields}")
 
         for field_name, field_def in fields_def.items():
             if not isinstance(field_def, dict):
@@ -233,12 +285,13 @@ class FieldValidatorModule(BaseModule):
                 is_required = required_val.strip() == "是"
             else:
                 is_required = bool(required_val)
-            
+
             if not is_required:
                 continue
 
             # 检查字段是否存在于 DataFrame 中
             if field_name not in df.columns:
+                logger.debug(f"[_check_required_fields] [{field_name}] 字段不存在，整列 {total_rows} 行均为错误")
                 # 必填字段缺失（整列缺失）
                 for i in range(len(df)):
                     errors.append({
@@ -255,6 +308,8 @@ class FieldValidatorModule(BaseModule):
             empty_mask = df[field_name].cast(pl.Utf8).str.strip_chars() == ""
             error_mask = null_mask | empty_mask
             error_count = error_mask.sum()
+
+            logger.debug(f"[_check_required_fields] [{field_name}] 检查完成: 总行数={total_rows}, 空值数={error_count}")
 
             if error_count > 0:
                 # 获取错误行的行号和原始值
@@ -456,7 +511,7 @@ class FieldValidatorModule(BaseModule):
                             "问题类型": "REGEX_FAILED",
                             "说明": f"不符合正则规则: {regex_pattern}",
                         })
-            except Exception as e:
+            except re.error as e:
                 logger.warning(f"[F2] 正则表达式匹配失败: {pattern}, {e}")
                 continue
 

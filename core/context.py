@@ -78,7 +78,7 @@ class ProcessContext:
     dict_file_path: Optional[str] = None  # 数据字典文件路径（F1 加载后设置）
     spec_file_path: Optional[str] = None  # 字段规范文件路径（F1 加载后设置）
 
-    def set_input_file(self, list_type: str, file_path: str):
+    def set_input_file(self, list_type: str, file_path: str) -> None:
         """设置指定类型名单的输入文件路径"""
         key_map = {"一线": "yixian", "三方": "sanfang", "hw": "hw", "HW": "hw"}
         key = key_map.get(list_type, list_type)
@@ -90,7 +90,7 @@ class ProcessContext:
         key = key_map.get(list_type, list_type)
         return self.input_files.get(key)
 
-    def set_dataframe(self, list_type: str, df: Optional[pl.DataFrame]):
+    def set_dataframe(self, list_type: str, df: Optional[pl.DataFrame]) -> None:
         """存储处理后的 DataFrame"""
         self.dataframes[list_type] = df
 
@@ -104,9 +104,9 @@ class ProcessContext:
         success_count: int = 0,
         fail_count: int = 0,
         skip_count: int = 0,
-        message: str = None,
-        rejected: "pl.DataFrame" = None,  # [20260420-老谈] ISSUE-08: 支持重复行详情
-    ):
+        message: Optional[str] = None,
+        rejected: Optional["pl.DataFrame"] = None,  # [20260420-老谈] ISSUE-08: 支持重复行详情
+    ) -> None:
         """记录模块执行结果"""
         self.module_results[module] = {
             "success": success_count,

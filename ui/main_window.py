@@ -38,6 +38,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.context import ProcessContext
+from infra.dict_format_validator import validate_dict_format
 from infra.log_manager import get_logger
 from ui.widgets.error_dialog import show_critical_error
 from ui.widgets.history_dialog import HistoryDialog
@@ -51,6 +52,31 @@ from ui.widgets.version_manager import VersionManager
 from ui.worker import ProcessingWorker
 
 logger = get_logger(__name__)
+
+# ============================================================
+# 全局常量定义（消除魔法数字/字符串）
+# ============================================================
+# 数据源标识
+SOURCE_KEY_YIXIAN = "yixian"      # 一线名单
+SOURCE_KEY_SANFANG = "sanfang"    # 三方名单
+SOURCE_KEY_HW = "hw"               # HW名单
+
+# 标注值常量
+YES_VALUE = "是"                   # 已存在标注
+NO_VALUE = "否"                    # 不存在标注
+ORIGINAL_VALUE = "原始"            # 原始记录标注
+REPEAT_VALUE = "重复"              # 重复记录标注
+UNMATCHED_VALUE = "未匹配"         # 未匹配标注
+
+# 字典上码占位符
+UNMATCHED_PLACEHOLDER = "未匹配"   # 字典值不匹配时的占位符
+
+# 日志管理器常量
+LOG_MAX_BYTES = 10 * 1024 * 1024  # 单个日志文件最大 10MB
+LOG_BACKUP_COUNT = 5              # 日志备份文件数量
+
+# ZIP解析常量
+ZIP_SHARED_STRINGS_PATH = 'xl/sharedStrings.xml'  # Excel共享字符串路径
 
 # ============================================================
 # 界面尺寸常量
@@ -262,10 +288,10 @@ class MainWindow(QMainWindow):
         self.worker: Optional[ProcessingWorker] = None
         self.result_viewer: Optional[ResultViewerDialog] = None
 
-        # 文件路径
+        # 文件路径（统一使用内部键: yixian, sanfang, hw）
         self.file_paths = {
-            "frontline": None,      # 一线人员名单
-            "third_party": None,    # 三方系统名单
+            "yixian": None,         # 一线人员名单
+            "sanfang": None,        # 三方系统名单
             "hw": None,             # HW系统名单
             "dict": None,           # 数据字典文件
             "spec": None,           # 字段规范文件
@@ -318,7 +344,7 @@ class MainWindow(QMainWindow):
                 capture_output=True, text=True, timeout=2
             )
             return "Dark" in result.stdout
-        except Exception:
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):  # [FIX] 限定具体异常类型
             return False
 
     def _check_and_apply_theme(self):
@@ -441,8 +467,8 @@ class MainWindow(QMainWindow):
 
         # 文件配置：key, 标签, 提示, 是否必填
         file_configs = [
-            ("frontline", "一线人员名单", "请选择文件...", True),
-            ("third_party", "三方系统名单", "（可选）", False),
+            ("yixian", "一线人员名单", "请选择文件...", True),
+            ("sanfang", "三方系统名单", "（可选）", False),
             ("hw", "HW系统名单", "（可选）", False),
             ("dict", "数据字典", "请选择文件...", True),
             ("spec", "字段规范", "config/field_spec.yaml", False),
@@ -479,7 +505,9 @@ class MainWindow(QMainWindow):
             btn = QPushButton("导入" if key == "spec" else "浏览")
             btn.setFixedSize(80, 36)  # 按钮高度保持 36px
             btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
-            btn.clicked.connect(lambda checked, k=key: self._select_file(k))
+            # [FIX #13] 使用 functools.partial 替代 lambda 闭包，更清晰
+            from functools import partial
+            btn.clicked.connect(partial(self._select_file, key))
             input_layout.addWidget(btn)
             self.file_buttons[key] = btn
 
@@ -594,22 +622,22 @@ class MainWindow(QMainWindow):
     def _select_dedup_field(self):
         """[20260420-老谈] ISSUE-12: 选择去重字段弹窗 [FIX] 智能推荐"""
         # 先获取一线名单的列名
-        frontline_path = self.file_paths.get("frontline")
-        if not frontline_path:
+        yixian_path = self.file_paths.get("yixian")
+        if not yixian_path:
             QMessageBox.warning(self, "提示", "请先选择一线人员名单文件")
             return
 
-        if str(frontline_path).lower().endswith('.csv'):
+        if str(yixian_path).lower().endswith('.csv'):
             # CSV 文件直接用 polars 读取
             import polars as pl
-            df_sample = pl.read_csv(frontline_path, nrows=1)
+            df_sample = pl.read_csv(yixian_path, nrows=1)
             columns = df_sample.columns
         else:
             # Excel 文件：使用用户选择的 sheet 获取列名
             # [FIX v1.0.7] 从 _sheet_selections 获取用户选择的 sheet
-            selected_sheet = getattr(self, '_sheet_selections', {}).get("frontline")
+            selected_sheet = getattr(self, '_sheet_selections', {}).get("yixian")
             logger.debug(f"[_select_dedup_field] 获取列名，sheet={selected_sheet}")
-            columns = self._get_excel_columns(frontline_path, selected_sheet)
+            columns = self._get_excel_columns(yixian_path, selected_sheet)
 
         if not columns:
             QMessageBox.warning(self, "错误", "无法读取文件列名")
@@ -786,7 +814,7 @@ class MainWindow(QMainWindow):
                             ss_xml = z.read(ss_path).decode('utf-8', errors='ignore')
                             # 解析共享字符串: <si><t>值</t></si>
                             shared_strings = re.findall(r'<si>.*?<t[^>]*>([^<]*)</t>', ss_xml, re.DOTALL)
-                except:
+                except (zipfile.BadZipFile, OSError, UnicodeDecodeError):  # [FIX] 限定具体异常类型
                     pass
             
             # 解析单元格值
@@ -823,7 +851,7 @@ class MainWindow(QMainWindow):
             logger.debug(f"[_get_excel_columns] 完成，获取 {len(columns)} 列，耗时: {time_module.time()-t0:.3f}s")
             return columns
 
-        except Exception as e:
+        except (PermissionError, OSError) as e:
             logger.warning(f"[_get_excel_columns] 读取Excel列名失败: {e}")
             return []
 
@@ -1063,7 +1091,6 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 padding: 4px 12px;
                 font-size: 12px;
-                transition: background-color 200ms ease;
             }}
             QPushButton#btnViewDetail:hover, QPushButton#btnOpenOutput:hover {{
                 background-color: {text_color}30;
@@ -1074,7 +1101,6 @@ class MainWindow(QMainWindow):
                 border: none;
                 font-size: 18px;
                 font-weight: bold;
-                transition: background-color 200ms ease;
             }}
             QPushButton#btnBannerClose:hover {{
                 background-color: {text_color}20;
@@ -1149,10 +1175,10 @@ class MainWindow(QMainWindow):
 
         if not output_path:
             # 尝试从一线名单路径推断输出目录
-            frontline_path = self.file_paths.get("frontline")
-            if frontline_path:
+            yixian_path = self.file_paths.get("yixian")
+            if yixian_path:
                 import os
-                output_path = os.path.dirname(frontline_path)
+                output_path = os.path.dirname(yixian_path)
 
         if output_path:
             import subprocess
@@ -1160,7 +1186,7 @@ class MainWindow(QMainWindow):
                 subprocess.run(["open", output_path], check=True)
                 self._log_message("INFO", f"已打开输出目录: {output_path}")
                 logger.info(f"用户打开输出目录: {output_path}")
-            except Exception as e:
+            except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
                 QMessageBox.warning(self, "提示", f"无法打开输出目录：{e}")
                 logger.warning(f"打开输出目录失败: {e}")
         else:
@@ -1312,7 +1338,7 @@ class MainWindow(QMainWindow):
         # [规范四] Ctrl+O: 打开文件
         open_action = QAction("打开一线名单", self)
         open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(lambda: self._select_file("frontline"))
+        open_action.triggered.connect(lambda: self._select_file("yixian"))
         file_menu.addAction(open_action)
 
         # [规范四] Ctrl+S: 保存配置
@@ -1389,7 +1415,7 @@ class MainWindow(QMainWindow):
             subprocess.run(["open", LOG_DIR], check=True)
             self._log_message("INFO", f"已打开日志目录: {LOG_DIR}")
             logger.info(f"用户打开日志目录: {LOG_DIR}")
-        except Exception as e:
+        except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
             QMessageBox.warning(self, "提示", f"无法打开日志目录：{e}")
             logger.warning(f"打开日志目录失败: {e}")
 
@@ -1410,7 +1436,7 @@ class MainWindow(QMainWindow):
             # 原型格式：字典 v{hash} (日期)
             self._update_window_title(f"字典 v{short_hash} ({datetime.now().strftime('%Y-%m-%d')})")
             logger.info(f"字典版本: {filename} (MD5: {short_hash})")
-        except Exception as e:
+        except (OSError, PermissionError, ValueError) as e:
             self._update_window_title(f"字典 版本检测失败")
             logger.warning(f"字典版本检测失败: {e}")
 
@@ -1430,11 +1456,14 @@ class MainWindow(QMainWindow):
     def _show_help(self):
         """[规范四] 显示帮助文档"""
         import subprocess
-        help_path = "/Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/README.md"
+        # [FIX #4] 使用相对路径替代硬编码绝对路径
+        import os
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        help_path = os.path.join(base_dir, "README.md")
         try:
             subprocess.run(["open", help_path], check=True)
             self._log_message("INFO", "已打开帮助文档")
-        except Exception:
+        except (FileNotFoundError, OSError, subprocess.CalledProcessError):  # [FIX] 限定具体异常类型
             QMessageBox.information(
                 self,
                 "帮助",
@@ -1471,7 +1500,7 @@ class MainWindow(QMainWindow):
             le.setStyleSheet("")
         
         # 禁用可选输入框
-        self.file_inputs["third_party"].setDisabled(True)
+        self.file_inputs["sanfang"].setDisabled(True)
         self.file_inputs["hw"].setDisabled(True)
         self.file_inputs["spec"].setDisabled(True)
         
@@ -1542,10 +1571,10 @@ class MainWindow(QMainWindow):
             return
 
         # 根据类型确定对话框标题和文件过滤器
-        if file_type == "frontline":
+        if file_type == "yixian":
             title = "选择一线人员名单"
             filters = "Excel 文件 (*.xlsx *.xls);;CSV 文件 (*.csv);;所有文件 (*)"
-        elif file_type == "third_party":
+        elif file_type == "sanfang":
             title = "选择三方系统名单"
             filters = "Excel 文件 (*.xlsx *.xls);;CSV 文件 (*.csv);;所有文件 (*)"
         elif file_type == "hw":
@@ -1579,7 +1608,7 @@ class MainWindow(QMainWindow):
         self.file_inputs[file_type].setStyleSheet("")  # 清除错误样式
 
         # [优化 v1.0.7] 将 Sheet 检测和文件信息获取都移至后台执行，避免 UI 卡顿
-        if file_type in ("frontline", "third_party", "hw"):
+        if file_type in ("yixian", "sanfang", "hw"):
             # 取消旧线程（如果存在）
             self._cancel_file_load_thread(file_type)
             
@@ -1617,6 +1646,10 @@ class MainWindow(QMainWindow):
                 if len(sheet_names) == 1:
                     selected_sheet = sheet_names[0]
                     logger.info(f"[_fetch_file_and_sheet_async] [2/4] 单 Sheet，直接使用: {selected_sheet}")
+                    # 更新 _sheet_selections，确保传递给 F1 模块
+                    if not hasattr(self, '_sheet_selections'):
+                        self._sheet_selections = {}
+                    self._sheet_selections[file_type] = selected_sheet
                 elif len(sheet_names) > 1:
                     # 需要用户选择，在主线程弹出对话框
                     logger.info(f"[_fetch_file_and_sheet_async] [2/4] 多 Sheet ({len(sheet_names)}个)，弹出选择对话框...")
@@ -1669,16 +1702,10 @@ class MainWindow(QMainWindow):
             # 检查MD5变更并显示版本信息
             self._update_dict_version_label(file_path)
             self._check_dict_file_change(file_path)
-            # 显示成功状态
+            # 显示成功状态（带文字）
+            self.file_labels[file_type].setText("✅ 字典已加载")
             self._animate_file_info_success(file_type)
             self._log_message("INFO", f"已选择 [dict]: {basename}")
-
-        # 字段规范文件处理
-        elif file_type == "spec":
-            self._animate_file_info_updating(file_type)
-            self.file_labels[file_type].setText("✅ 字段规范已加载")
-            self._animate_file_info_success(file_type)
-            self._log_message("INFO", f"已加载字段规范: {basename}")
 
     def _cancel_file_load_thread(self, file_type: str):
         """[优化] 取消指定文件类型的读取线程"""
@@ -1732,7 +1759,7 @@ class MainWindow(QMainWindow):
             sheet_names = re.findall(r'<sheet[^>]+name="([^"]+)"', wb_xml)
             logger.info(f"[_get_excel_sheet_names_from_xml] [D] 解析到 Sheet 列表: {sheet_names}")
             return sheet_names
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"[_get_excel_sheet_names_from_xml] [ERROR] 获取 Sheet 列表失败: {e}")
             return []
 
@@ -1791,42 +1818,133 @@ class MainWindow(QMainWindow):
         self._update_start_button_state()
 
     def _check_dict_file_change(self, file_path: str):
-        """[20260420-老谈] ISSUE-13: 检查字典文件是否变更"""
-        import hashlib
-        
-        try:
-            with open(file_path, 'rb') as f:
-                md5_hash = hashlib.md5(f.read()).hexdigest()
-            md5_short = md5_hash[:8]
-            
-            # 获取上次的MD5（兼容处理：如果是32位则取前8位）
-            last_md5 = getattr(self, '_last_dict_md5', None)
-            if last_md5:
-                last_md5 = last_md5[:8] if len(last_md5) > 8 else last_md5
-            
-            if last_md5 and last_md5 != md5_short:
-                # MD5变更，提示用户
-                reply = QMessageBox.question(
-                    self,
-                    "字典文件变更",
-                    f"检测到字典文件已变更！\n\n"
-                    f"旧版本: {last_md5}\n"
-                    f"新版本: {md5_short}\n\n"
-                    f"是否继续使用新版本？",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
-                if reply == QMessageBox.No:
-                    self.file_paths["dict"] = None
-                    self.file_inputs["dict"].clear()
-                    self.file_inputs["dict"].setPlaceholderText("请重新选择文件...")
-                    return
-            
-            self._last_dict_md5 = md5_short
-            self._update_window_title(f"字典 v{md5_short} ({datetime.now().strftime('%Y-%m-%d')})")
-            
-        except Exception as e:
-            logger.warning(f"MD5计算失败: {e}")
+        """
+        [20260420-老谈] ISSUE-13: 检查字典文件是否变更
+        [20260422-优化] 添加格式预校验，不合规文件禁止更新字典版本
+
+        处理流程：
+        1. 格式校验（优先）→ 2. MD5校验 → 3. 更新状态
+        """
+        # Step 1: 格式校验（优先执行）
+        is_valid, msg, md5_hash = validate_dict_format(file_path)
+        if not is_valid:
+            logger.warning(f"[_check_dict_file_change] 格式校验失败: {msg}")
+            QMessageBox.warning(
+                self,
+                "字典格式错误",
+                f"{msg}\n\n请重新选择符合规范的字典文件。"
+            )
+            # 状态还原到"默认值"：尝试从数据库恢复上次保存的配置
+            self._restore_dict_default_state()
+            return
+
+        md5_short = md5_hash[:8]
+
+        # Step 2: MD5校验
+        last_md5 = getattr(self, '_last_dict_md5', None)
+        if last_md5:
+            last_md5 = last_md5[:8] if len(last_md5) > 8 else last_md5
+
+        if last_md5 and last_md5 != md5_short:
+            # MD5变更，提示用户
+            reply = QMessageBox.question(
+                self,
+                "字典文件变更",
+                f"检测到字典文件已变更！\n\n"
+                f"旧版本: {last_md5}\n"
+                f"新版本: {md5_short}\n\n"
+                f"是否继续使用新版本？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.No:
+                self.file_paths["dict"] = None
+                self.file_inputs["dict"].clear()
+                self.file_inputs["dict"].setPlaceholderText("请重新选择文件...")
+                return
+
+        # Step 3: 更新状态（仅在格式和MD5校验均通过时）
+        self._last_dict_md5 = md5_short
+        self._update_window_title(f"字典 v{md5_short} ({datetime.now().strftime('%Y-%m-%d')})")
+
+    def _load_dict_default_config(self, from_init: bool = False):
+        """
+        [20260422-重构] 统一的字典默认值加载/恢复逻辑
+
+        Parameters
+        ----------
+        from_init : bool
+            - True: 初始化时调用（不需要清除file_labels、不需要更新开始按钮）
+            - False: 恢复时调用（需要清除file_labels、需要更新开始按钮）
+        """
+        from db.dao.app_config import AppConfigDAO
+
+        last_dict_path = AppConfigDAO.get("last_dict_file_path")
+        last_dict_md5 = AppConfigDAO.get("last_dict_md5")
+        last_dict_time = AppConfigDAO.get("last_dict_import_time")
+
+        if last_dict_path and os.path.exists(last_dict_path):
+            # 有默认值，恢复该配置
+            self.file_paths["dict"] = last_dict_path
+            self.file_inputs["dict"].setText(os.path.basename(last_dict_path))
+            self.file_inputs["dict"].setStyleSheet("")
+            self.file_inputs["dict"].setPlaceholderText("")
+
+            # 兼容处理：如果是32位MD5则取前8位
+            if last_dict_md5:
+                last_dict_md5 = last_dict_md5[:8] if len(last_dict_md5) > 8 else last_dict_md5
+            self._last_dict_md5 = last_dict_md5 or ""
+
+            # 还原文件信息标签（仅在恢复时需要清除loading状态）
+            if not from_init:
+                label = self.file_labels.get("dict")
+                if label:
+                    label.setText("")
+                    label.setProperty("fileInfoState", "")
+                    label.style().unpolish(label)
+                    label.style().polish(label)
+
+            # 显示导入时间
+            time_info = ""
+            if last_dict_time:
+                try:
+                    dt = datetime.fromisoformat(last_dict_time)
+                    time_info = f" | 导入: {dt.strftime('%Y-%m-%d %H:%M')}"
+                except (ValueError, TypeError):  # [FIX] 限定具体异常类型
+                    time_info = f" | 导入: {last_dict_time}"
+
+            display_md5 = f"v{last_dict_md5 or '?'}" if last_dict_md5 else ""
+            self._update_window_title(f"字典 {display_md5} (默认值)")
+
+            if from_init:
+                self._log_message("INFO", f"已自动加载字典：{os.path.basename(last_dict_path)} {display_md5}{time_info}")
+                logger.info(f"自动加载字典: {last_dict_path}")
+            else:
+                logger.info(f"[_load_dict_default_config] 已恢复默认值: {last_dict_path}")
+        else:
+            # 无默认值，清除所有字典状态
+            self.file_paths["dict"] = None
+            self.file_inputs["dict"].clear()
+            self.file_inputs["dict"].setPlaceholderText("请重新选择文件...")
+
+            label = self.file_labels.get("dict")
+            if label:
+                label.setText("")
+                label.setProperty("fileInfoState", "")
+                label.style().unpolish(label)
+                label.style().polish(label)
+
+            self._last_dict_md5 = ""
+            self._update_window_title("")  # 清除字典版本显示
+            logger.info("[_load_dict_default_config] 无默认值，已清除字典状态")
+
+        # 更新开始按钮状态（仅在恢复时需要）
+        if not from_init:
+            self._update_start_button_state()
+
+    def _restore_dict_default_state(self):
+        """[兼容别名] 恢复字典到默认值（供_check_dict_file_change调用）"""
+        self._load_dict_default_config(from_init=False)
 
     def _handle_multi_sheet_selection(self, file_path: str, file_type: str) -> Optional[str]:
         """
@@ -1912,7 +2030,7 @@ class MainWindow(QMainWindow):
             self._sheet_selections[file_type] = selected
             return selected
 
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.error(f"[_handle_multi_sheet_selection] 检测 Sheet 失败: {e}")
             self._sheet_selections[file_type] = None
             return None
@@ -1940,10 +2058,15 @@ class MainWindow(QMainWindow):
             self.file_paths["spec"] = output_path
             self.file_inputs["spec"].setText(self._last_spec_excel_name)
             self.file_inputs["spec"].setStyleSheet("")
-            self.file_labels["spec"].setText(f"已导入：{imported_count} 个字段")
+            self.file_labels["spec"].setText(f"✅ 字段规范已加载：{imported_count} 个字段")
 
-            self._log_message("INFO", f"字段规范已导入：{imported_count} 个字段 ({self._last_spec_excel_name})")
-            logger.info(f"字段规范已导入: {output_path}, {imported_count} 个字段")
+            self._log_message("INFO", f"字段规范已加载：{imported_count} 个字段 ({self._last_spec_excel_name})")
+            logger.info(f"字段规范已加载: {output_path}, {imported_count} 个字段")
+
+            # [FIX] 导入新规范后清除缓存，确保下次处理使用最新规范
+            from infra.spec_loader import clear_cache
+            clear_cache()
+            logger.info("[_import_spec_file] 字段规范缓存已清除")
 
             # 更新开始按钮状态
             self._update_start_button_state()
@@ -1956,7 +2079,7 @@ class MainWindow(QMainWindow):
             sheet_names = wb.sheetnames
             wb.close()
             return sheet_names
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"读取Excel Sheet列表失败: {e}")
             return []
 
@@ -2098,7 +2221,7 @@ class MainWindow(QMainWindow):
                     logger.info(f"[_get_file_info] [14] Excel 列数: {result['cols']}")
             
             logger.info(f"[_get_file_info] [15] 完成: cols={result['cols']}, rows={result['rows']}, 总耗时: {time_module.time()-t0:.3f}s")
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.warning(f"[_get_file_info] [ERROR] 获取文件信息失败: {e}")
         
         return result
@@ -2127,14 +2250,14 @@ class MainWindow(QMainWindow):
                 # 数据无效（0行0列），显示警告
                 logger.warning(f"[_update_file_info_safe] 文件数据无效，跳过信息展示")
                 self.file_labels[file_type].setText("⚠️ 文件读取失败，请检查文件格式")
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             logger.warning(f"[_update_file_info_safe] 更新文件信息UI失败: {e}")
             self.file_labels[file_type].setText("✅ 已选择")
             self._animate_file_info_success(file_type)
 
     def _validate_inputs(self) -> tuple[bool, str]:
         """验证输入文件"""
-        if not self.file_paths.get("frontline"):
+        if not self.file_paths.get("yixian"):
             return False, "请选择一线人员名单文件（必选）"
         if not self.file_paths.get("dict"):
             return False, "请选择数据字典文件（必选）"
@@ -2156,10 +2279,10 @@ class MainWindow(QMainWindow):
     def _update_start_button_state(self):
         """[ISSUE-14] 更新开始按钮状态"""
         # 检查必填文件是否已选择
-        frontline = self.file_paths.get("frontline")
+        yixian = self.file_paths.get("yixian")
         dict_file = self.file_paths.get("dict")
 
-        if frontline and dict_file:
+        if yixian and dict_file:
             self.btn_start.setEnabled(True)
         else:
             self.btn_start.setEnabled(False)
@@ -2170,10 +2293,10 @@ class MainWindow(QMainWindow):
         from datetime import datetime
 
         # 再次检查文件
-        frontline_path = self.file_paths.get("frontline")
+        yixian_path = self.file_paths.get("yixian")
         dict_path = self.file_paths.get("dict")
 
-        if not frontline_path:
+        if not yixian_path:
             QMessageBox.warning(self, "提示", "请选择一线人员名单文件")
             return
 
@@ -2181,10 +2304,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "请选择数据字典文件")
             return
 
-        # 准备输入文件字典
+        # 准备输入文件字典（统一使用内部键）
         input_files = {
-            "yixian": frontline_path,
-            "sanfang": self.file_paths.get("third_party"),
+            "yixian": yixian_path,
+            "sanfang": self.file_paths.get("sanfang"),
             "hw": self.file_paths.get("hw"),
         }
 
@@ -2193,8 +2316,8 @@ class MainWindow(QMainWindow):
         if not dedup_field:
             # 尝试自动识别
             # [FIX v1.0.7] 从 _sheet_selections 获取用户选择的 sheet
-            selected_sheet = getattr(self, '_sheet_selections', {}).get("frontline")
-            columns = self._get_excel_columns(frontline_path, selected_sheet)
+            selected_sheet = getattr(self, '_sheet_selections', {}).get("yixian")
+            columns = self._get_excel_columns(yixian_path, selected_sheet)
             if columns:
                 dedup_field = self._auto_detect_dedup_field(columns)
                 self._dedup_field = dedup_field
@@ -2205,7 +2328,7 @@ class MainWindow(QMainWindow):
         output_dir = self.txt_output.text().strip()
         if not output_dir:
             # 默认使用一线名单所在目录
-            output_dir = os.path.dirname(frontline_path)
+            output_dir = os.path.dirname(yixian_path)
 
         # 收集勾选的模块
         selected_modules = []
@@ -2352,7 +2475,7 @@ class MainWindow(QMainWindow):
                 if output_dir:
                     # complete_run 已经在 orchestrator 中调用
                     pass
-        except Exception as e:
+        except (AttributeError, KeyError) as e:
             logger.warning(f"更新历史输出目录失败: {e}")
 
         # 禁用取消按钮
@@ -2385,7 +2508,7 @@ class MainWindow(QMainWindow):
         # 获取最新的输出文件
         output_dir = self.txt_output.text().strip()
         if not output_dir:
-            output_dir = os.path.dirname(self.file_paths.get("frontline", ""))
+            output_dir = os.path.dirname(self.file_paths.get("yixian", ""))
 
         # 打开输出目录
         if os.path.exists(output_dir):
@@ -2510,33 +2633,8 @@ class MainWindow(QMainWindow):
                 padding: 0 12px;
             """)
 
-        # 加载字典配置
-        last_dict_path = AppConfigDAO.get("last_dict_file_path")
-        last_dict_time = AppConfigDAO.get("last_dict_import_time")
-        last_dict_md5 = AppConfigDAO.get("last_dict_md5")
-        if last_dict_path and os.path.exists(last_dict_path):
-            self.file_paths["dict"] = last_dict_path
-            self.file_inputs["dict"].setText(os.path.basename(last_dict_path))
-            self.file_inputs["dict"].setStyleSheet("")
-            
-            # 兼容处理：如果是32位MD5则取前8位
-            if last_dict_md5:
-                last_dict_md5 = last_dict_md5[:8] if len(last_dict_md5) > 8 else last_dict_md5
-            self._last_dict_md5 = last_dict_md5 or ""
-            
-            # 显示导入时间（与字段规范格式一致）
-            time_info = ""
-            if last_dict_time:
-                try:
-                    dt = datetime.fromisoformat(last_dict_time)
-                    time_info = f" | 导入: {dt.strftime('%Y-%m-%d %H:%M')}"
-                except Exception:
-                    time_info = f" | 导入: {last_dict_time}"
-            
-            display_md5 = f"v{last_dict_md5 or '?'}" if last_dict_md5 else ""
-            self._update_window_title(f"字典 {display_md5} (默认值)")
-            self._log_message("INFO", f"已自动加载字典：{os.path.basename(last_dict_path)} {display_md5}{time_info}")
-            logger.info(f"自动加载字典: {last_dict_path}")
+        # 加载字典配置（复用统一方法）
+        self._load_dict_default_config(from_init=True)
 
         # 加载字段规范配置
         last_spec_path = AppConfigDAO.get("last_spec_file_path")
@@ -2556,7 +2654,7 @@ class MainWindow(QMainWindow):
                 try:
                     dt = datetime.fromisoformat(last_spec_time)
                     time_info = f" | 导入: {dt.strftime('%Y-%m-%d %H:%M')}"
-                except Exception:
+                except (ValueError, TypeError):  # [FIX] 限定具体异常类型
                     time_info = f" | 导入: {last_spec_time}"
             
             self.file_labels["spec"].setText(f"✅ 默认值{time_info}")

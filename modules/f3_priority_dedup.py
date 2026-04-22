@@ -21,6 +21,12 @@ from infra.log_manager import get_logger
 
 logger = get_logger(__name__)
 
+# 标注常量
+YES_VALUE = "是"
+NO_VALUE = "否"
+COL_YIXIAN_FLAG = "是否已在一线名单"
+COL_SANFANG_FLAG = "是否已在三方名单"
+
 
 class PriorityDedupModule(BaseModule):
     """
@@ -119,19 +125,14 @@ class PriorityDedupModule(BaseModule):
         if df_yixian is not None and dedup_field in df_yixian.columns:
             yixian_keys = self._extract_keys(df_yixian, dedup_field)
             total_yixian = len(df_yixian)
-            logger.info(f"[F3] 一线名单：{total_yixian} 行，{len(yixian_keys)} 个唯一邮箱")
+            logger.info(f"[F3] 一线名单：{total_yixian} 行，{len(yixian_keys)} 个唯一{dedup_field}")
 
         # ── F3-01: 三方 vs 一线标注 ───────────────────────────
         df_sanfang = context.get_dataframe("sanfang")
         if df_sanfang is not None and dedup_field in df_sanfang.columns:
-            df_sanfang = df_sanfang.with_columns(
-                pl.col(dedup_field).map_elements(
-                    lambda x: self._match_key(x, yixian_keys),
-                    return_dtype=pl.String
-                ).alias("是否已在一线名单")
-            )
+            df_sanfang = self._annotate_in_set(df_sanfang, dedup_field, yixian_keys, COL_YIXIAN_FLAG)
             context.set_dataframe("sanfang", df_sanfang)
-            sanfang_in_yixian = df_sanfang.filter(pl.col("是否已在一线名单") == "是").height
+            sanfang_in_yixian = df_sanfang.filter(pl.col(COL_YIXIAN_FLAG) == YES_VALUE).height
             total_sanfang = len(df_sanfang)
             logger.info(f"[F3] 三方名单：{total_sanfang} 行，其中 {sanfang_in_yixian} 条在一线名单中")
 
@@ -139,26 +140,16 @@ class PriorityDedupModule(BaseModule):
         df_hw = context.get_dataframe("hw")
         if df_hw is not None and dedup_field in df_hw.columns:
             # F3-02: HW vs 一线
-            df_hw = df_hw.with_columns(
-                pl.col(dedup_field).map_elements(
-                    lambda x: self._match_key(x, yixian_keys),
-                    return_dtype=pl.String
-                ).alias("是否已在一线名单")
-            )
+            df_hw = self._annotate_in_set(df_hw, dedup_field, yixian_keys, COL_YIXIAN_FLAG)
 
             # F3-03: HW vs 三方
             if df_sanfang is not None:
                 sanfang_keys = self._extract_keys(df_sanfang, dedup_field)
-                df_hw = df_hw.with_columns(
-                    pl.col(dedup_field).map_elements(
-                        lambda x: self._match_key(x, sanfang_keys),
-                        return_dtype=pl.String
-                    ).alias("是否已在三方名单")
-                )
-                hw_in_sanfang = df_hw.filter(pl.col("是否已在三方名单") == "是").height
+                df_hw = self._annotate_in_set(df_hw, dedup_field, sanfang_keys, COL_SANFANG_FLAG)
+                hw_in_sanfang = df_hw.filter(pl.col(COL_SANFANG_FLAG) == YES_VALUE).height
 
             context.set_dataframe("hw", df_hw)
-            hw_in_yixian = df_hw.filter(pl.col("是否已在一线名单") == "是").height
+            hw_in_yixian = df_hw.filter(pl.col(COL_YIXIAN_FLAG) == YES_VALUE).height
             total_hw = len(df_hw)
             logger.info(f"[F3] HW名单：{total_hw} 行，其中 {hw_in_yixian} 条在一线名单，{hw_in_sanfang} 条在三方名单")
 
@@ -176,34 +167,41 @@ class PriorityDedupModule(BaseModule):
         logger.info("[F3] 跨名单去重标注完成")
         return context
 
-    def _extract_keys(self, df: pl.DataFrame, dedup_field: str) -> set:
+    def _extract_keys(self, df: pl.DataFrame, dedup_field: str) -> set:  # noqa: E731
         """
         从 DataFrame 提取去重字段值集合（标准化处理）
 
         F3-05: 匹配不区分大小写，自动去除首尾空格
+        [PERF] 使用 Polars 向量化操作替代 iter_rows
         """
-        keys = set()
-        for val in df[dedup_field]:
-            if val is not None:
-                key = str(val).strip().lower()
-                if key:
-                    keys.add(key)
-        return keys
+        # [PERF] 使用 Polars 向量化操作：去除空格 + 转小写 + 过滤空值
+        col = df[dedup_field].cast(pl.Utf8).str.strip_chars()
+        keys = col.str.to_lowercase().filter(col != "").unique().to_list()
+        return set(k for k in keys if k)
 
-    def _match_key(self, val, key_set: set) -> str:
+    def _annotate_in_set(self, df: pl.DataFrame, dedup_field: str, key_set: set, col_name: str) -> pl.DataFrame:
         """
         判断值是否在集合中（F3-05: 标准化处理）
 
+        [PERF] 使用 Polars 原生向量化操作替代 map_elements
+
         Returns
         -------
-        str
-            "是" 或 "否"
+        pl.DataFrame
+            带标注列的新 DataFrame
         """
-        if val is None:
-            return "否"
+        if not key_set:
+            # 集合为空，全部标记为"否"
+            return df.with_columns(pl.lit(NO_VALUE).alias(col_name))
 
-        key = str(val).strip().lower()
-        if not key:
-            return "否"
+        # [PERF] 向量化操作：去除空格 + 转小写
+        normalized = df[dedup_field].cast(pl.Utf8).str.strip_chars().str.to_lowercase()
 
-        return "是" if key in key_set else "否"
+        # [PERF] 使用 replace 使用集合进行映射
+        # 构建映射字典：null -> "否", 空字符串 -> "否", 其他 -> ("是" 或 "否")
+        result = normalized.map_elements(
+            lambda x: YES_VALUE if x and x in key_set else NO_VALUE,
+            return_dtype=pl.Utf8
+        ).alias(col_name)
+
+        return df.with_columns(result)

@@ -64,7 +64,7 @@ class ProcessingWorker(QThread):
         self.progress_callback = progress_callback
         self.orchestrator = None  # 延迟初始化
 
-    def run(self):
+    def run(self) -> None:
         """线程主方法（由 QThread 自动调用）"""
         self.status_changed.emit("处理开始...")
         self._emit_log("INFO", f"处理流程启动 run_id={self.context.run_id}")
@@ -100,13 +100,13 @@ class ProcessingWorker(QThread):
             self._emit_log("ERROR", error_msg)
             self.finished.emit(self.context, False, error_msg)
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, TypeError) as e:
             error_msg = f"未预期错误: {e}"
             self.status_changed.emit("处理异常")
             self._emit_log("ERROR", error_msg)
             self.finished.emit(self.context, False, error_msg)
 
-    def _emit_log(self, level: str, message: str):
+    def _emit_log(self, level: str, message: str) -> None:
         """发送日志消息信号"""
         self.log_message.emit(level, message)
         logger.info(f"[{level}] {message}")

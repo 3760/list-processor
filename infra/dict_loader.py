@@ -62,7 +62,8 @@ class DictLoader:
     def _load(self):
         """内部加载逻辑"""
         self.md5_hash = self._compute_md5()
-        workbook = openpyxl.load_workbook(self.file_path, data_only=True)
+        # [FIX #10] 使用 read_only=True 提升大文件加载性能，减少内存占用
+        workbook = openpyxl.load_workbook(self.file_path, data_only=True, read_only=True)
         sheet = workbook.active
 
         # 读取表头行（3行）
@@ -75,6 +76,7 @@ class DictLoader:
         # 逐组解析数据（从第4行开始，跳过3行表头）
         for dict_name, code_col, details_col in dict_groups:
             code_to_label: Dict[str, str] = {}
+            label_to_code: Dict[str, str] = {}  # [FIX #2] 添加反向映射，供 F4/F5 使用
             for row in sheet.iter_rows(min_row=4, values_only=True):  # 数据从第4行开始
                 code_val = row[code_col] if code_col < len(row) else None
                 label_val = row[details_col] if details_col < len(row) else None
@@ -84,8 +86,16 @@ class DictLoader:
                 label_str = str(label_val).strip() if label_val is not None else ""
                 if code_str:
                     code_to_label[code_str] = label_str
+                    # [FIX #2] 构建反向映射（Label -> Code），用于 F4/F5 的值匹配
+                    if label_str:
+                        label_lower = label_str.lower()
+                        label_to_code[label_lower] = code_str
 
-            self.mappings[dict_name] = code_to_label
+            # [FIX #2] 同时存储正向和反向映射
+            self.mappings[dict_name] = {
+                "正向": code_to_label,
+                "反向": label_to_code,
+            }
             self._dict_names.append(dict_name)
 
         workbook.close()
@@ -187,66 +197,7 @@ class DictLoader:
                 break
         return result.strip()
 
-    def _parse_header_compat(self, header_row: List) -> List[tuple]:
-        """
-        [兼容性] 旧版表头解析逻辑：从列名含 "Code"/"编码" 识别字典组。
-
-        Returns
-        -------
-        List[(dict_name, code_col_idx, details_col_idx)]
-        """
-        groups = []
-        col_count = len(header_row)
-        col = 0
-
-        while col < col_count - 1:
-            header_val = header_row[col]
-            if header_val is None:
-                col += 1
-                continue
-
-            header_str = str(header_val).strip()
-            # 判断是否为 Code 列
-            if "code" in header_str.lower() or "编码" in header_str:
-                dict_name = self._derive_dict_name(header_str, col, header_row)
-                # 右侧相邻列默认为 Details
-                details_col = col + 1
-                if details_col < col_count:
-                    groups.append((dict_name, col, details_col))
-                    col += 2
-                    continue
-            col += 1
-
-        return groups
-
-    def _derive_dict_name(self, header_str: str, col_idx: int, header_row: List) -> str:
-        """
-        从表头文本推断字典名称（兼容性方法）。
-
-        规则：取 Code 前的文本作为字典名；
-        若无前序文本，使用列所在组的上方单元格或列索引。
-        """
-        # 移除 "Code" / "code" 等后缀
-        name = header_str
-        for suffix in ["Code", "CODE", "代码", "编码"]:
-            if name.endswith(suffix):
-                name = name[: -len(suffix)].strip()
-                break
-
-        if name:
-            return name
-
-        # 检查右侧相邻列的表头（通常标注为 Details / 说明）
-        if col_idx + 1 < len(header_row):
-            next_header = header_row[col_idx + 1]
-            if next_header:
-                next_str = str(next_header).strip()
-                for suffix in ["Details", "DETAILS", "说明", "Label", "标签"]:
-                    if next_str.endswith(suffix):
-                        return next_str[: -len(suffix)].strip()
-
-        # 回退：使用列字母
-        return f"Dict_Col{col_idx}"
+    # [FIX #12] 已移除未使用的兼容性函数 _parse_header_compat 和 _derive_dict_name
 
     def _compute_md5(self) -> str:
         """计算字典文件的 MD5 哈希值"""

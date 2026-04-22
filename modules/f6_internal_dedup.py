@@ -21,6 +21,12 @@ from infra.log_manager import get_logger
 
 logger = get_logger(__name__)
 
+# 内部去重标注常量
+ORIGINAL_VALUE = "原始"      # 首次出现的记录
+REPEAT_VALUE = "重复"        # 重复出现的记录
+UNKNOWN_VALUE = "未知"      # 空值/跳过记录
+DEDUP_RESULT_COL = "内部去重结果"  # 去重结果列名
+
 
 class InternalDedupModule(BaseModule):
     """
@@ -93,7 +99,7 @@ class InternalDedupModule(BaseModule):
         -------
         ProcessContext
         """
-        logger.info("[F6] 开始名单内部重复检查")
+        logger.info("[F6] 开始名单内部去重")
 
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None or df_yixian.is_empty():
@@ -123,9 +129,9 @@ class InternalDedupModule(BaseModule):
 
         # 步骤1：添加行号 + 处理空值（Polars原生，无Python循环）
         df = df_yixian.with_columns(
-            pl.int_range(0, pl.len(), eager=True).alias("__row_index__"),
+            pl.int_range(0, df_yixian.height, eager=True).alias("__row_index__"),
             pl.col(dedup_field).fill_null("__NULL_VALUE__")
-        ).sort("__row_index__")  # 保持原始顺序
+        ).sort("__row_index__")
 
         # 步骤2：找出每组第一个行号（替代 cum_count().over()）
         # [PERF] 使用 group_by().agg(min()) 比窗口函数快 10-20 倍
@@ -152,9 +158,9 @@ class InternalDedupModule(BaseModule):
             pl.when(pl.col(dedup_field) == "__NULL_VALUE__")
               .then(pl.lit("未知"))
               .when(pl.col("__row_index__") == pl.col("__first_row__"))
-              .then(pl.lit("原始"))
-              .otherwise(pl.lit("重复"))
-              .alias("内部去重结果"),
+              .then(pl.lit(ORIGINAL_VALUE))
+              .otherwise(pl.lit(REPEAT_VALUE))
+              .alias(DEDUP_RESULT_COL),
             # _重复键值：空值行显示None，否则显示实际值
             pl.when(pl.col(dedup_field) == "__NULL_VALUE__")
               .then(pl.lit(None))
@@ -164,8 +170,13 @@ class InternalDedupModule(BaseModule):
             (pl.col("__row_index__") + 1).cast(pl.Int32).alias("_行号"),
             # _出现次数：填充NULL为0
             pl.col("_出现次数").fill_null(0).cast(pl.Int32),
-            # _重复标记：同内部去重结果
-            pl.col("内部去重结果").alias("_重复标记"),
+            # _重复标记：同内部去重结果（直接重复逻辑，避免引用未创建列）
+            pl.when(pl.col(dedup_field) == "__NULL_VALUE__")
+              .then(pl.lit("未知"))
+              .when(pl.col("__row_index__") == pl.col("__first_row__"))
+              .then(pl.lit(ORIGINAL_VALUE))
+              .otherwise(pl.lit(REPEAT_VALUE))
+              .alias("_重复标记"),
         )
 
         # 步骤6：恢复原始 dedup_field 值（移除 __NULL_VALUE__ 标记）
@@ -180,14 +191,13 @@ class InternalDedupModule(BaseModule):
         df_final = df_final.drop([
             "__row_index__",
             "__first_row__",
-            "__NULL_VALUE__",
         ])
 
         # ── 统计结果 [FIX] 术语修正：跳过 → 未知 ──────────────
         total_rows = len(df_final)
-        original_count = df_final.filter(pl.col("内部去重结果") == "原始").height
-        duplicate_count = df_final.filter(pl.col("内部去重结果") == "重复").height
-        unknown_count = df_final.filter(pl.col("内部去重结果") == "未知").height  # [FIX] 跳过 → 未知
+        original_count = df_final.filter(pl.col(DEDUP_RESULT_COL) == ORIGINAL_VALUE).height
+        duplicate_count = df_final.filter(pl.col(DEDUP_RESULT_COL) == REPEAT_VALUE).height
+        unknown_count = df_final.filter(pl.col(DEDUP_RESULT_COL) == UNKNOWN_VALUE).height
 
         # 有效参与去重的行数（排除未知/空值行）
         effective_rows = total_rows - unknown_count
@@ -201,7 +211,7 @@ class InternalDedupModule(BaseModule):
         )
 
         # ── 提取重复行详情 [FIX PRD F6-03] 包含所有附加列
-        rejected_df = df_final.filter(pl.col("内部去重结果") == "重复")
+        rejected_df = df_final.filter(pl.col(DEDUP_RESULT_COL) == REPEAT_VALUE)
 
         # ── 更新上下文 ────────────────────────────────────────
         context.set_dataframe("yixian", df_final)
@@ -220,5 +230,5 @@ class InternalDedupModule(BaseModule):
             rejected=rejected_df,  # [FIX] 重复行详情含 _行号/_重复键值/_出现次数/_重复标记
         )
 
-        logger.info("[F6] 名单内部重复检查完成")
+        logger.info("[F6] 名单内部去重完成")
         return context

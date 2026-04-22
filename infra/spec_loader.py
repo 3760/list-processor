@@ -56,6 +56,21 @@ def load_field_spec(spec_path: str = None) -> Dict[str, Any]:
     return spec
 
 
+def clear_spec_cache() -> None:
+    """
+    [FIX #11] 清除字段规范缓存。
+    
+    在测试场景或配置重载时调用此函数可确保重新加载规范文件。
+    
+    Usage:
+        from infra.spec_loader import clear_spec_cache
+        clear_spec_cache()
+    """
+    global _spec_cache
+    _spec_cache = None
+    logger.debug("[spec_loader] 字段规范缓存已清除")
+
+
 def _validate_spec(spec: Dict, source_path: str):
     """校验字段规范的完整性和一致性"""
     if not isinstance(spec, dict):
@@ -134,7 +149,7 @@ def get_required_fields(spec: Dict = None) -> List[str]:
     ]
 
 
-def clear_cache():
+def clear_cache() -> None:
     """清除规范缓存（测试用）"""
     global _spec_cache
     _spec_cache = None

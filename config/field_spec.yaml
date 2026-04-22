@@ -8,7 +8,7 @@ fields:
     sub_type: 输入框
   邮箱:
     attr_code: 邮箱
-    required: true
+    required: false
     type: email
     sub_type: 输入框
   手机:

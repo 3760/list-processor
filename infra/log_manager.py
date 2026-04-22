@@ -25,7 +25,7 @@ LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # 全局日志级别（默认 INFO）
-_global_level = logging.INFO
+_global_level = logging.DEBUG
 
 # 已注册的 logger 缓存，避免重复创建
 _registered_loggers = {}
@@ -76,7 +76,9 @@ def get_logger(
         logger.addHandler(console_handler)
 
     if to_file:
-        log_file = os.path.join(LOG_DIR, f"{name.split('.')[0] or 'app'}.log")
+        # [FIX #9] 使用 rsplit 更准确地提取模块名（支持嵌套包如 infra.dict_loader）
+        module_name = name.rsplit('.', 1)[-1] if '.' in name else (name.split('.')[0] or 'app')
+        log_file = os.path.join(LOG_DIR, f"{module_name}.log")
         file_handler = logging.handlers.RotatingFileHandler(
             log_file,
             maxBytes=10 * 1024 * 1024,  # 10 MB per file
@@ -91,7 +93,7 @@ def get_logger(
     return logger
 
 
-def set_global_level(level: int):
+def set_global_level(level: int) -> None:
     """
     设置全局日志级别。
 

@@ -142,15 +142,15 @@ class FunctionalTestSuite:
         try:
             # 模拟无必填文件的验证逻辑
             file_paths = {
-                "frontline": None,      # 必填，未选择
-                "third_party": None,
+                "yixian": None,         # 必填，未选择
+                "sanfang": None,
                 "hw": None,
                 "dict": None,           # 必填，未选择
                 "spec": None,
             }
 
             errors = []
-            if not file_paths["frontline"]:
+            if not file_paths["yixian"]:
                 errors.append("请选择一线人员名单文件")
             if not file_paths["dict"]:
                 errors.append("请选择数据字典文件")
