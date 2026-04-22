@@ -1,30 +1,380 @@
 version: '1.0'
-source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/业务验收/测试数据/field_spec_验收.xlsx
+source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/业务验收/测试数据/百万级测试数据/field_spec_百万级.xlsx
 fields:
   姓名:
     attr_code: 姓名
     required: true
-    type: 文本型
+    type: text
     sub_type: 输入框
   邮箱:
     attr_code: 邮箱
     required: true
-    type: 文本型
+    type: email
     sub_type: 输入框
   手机:
     attr_code: 手机
     required: false
-    type: 文本型
+    type: phone
     sub_type: 输入框
   客户来源:
     attr_code: 客户来源
     required: true
-    type: 文本型
-    sub_type: 单选项
-    dict_id: A2
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A1
   客户等级:
     attr_code: 客户等级
     required: false
-    type: 文本型
+    type: dict
     sub_type: 下拉单选
-    dict_id: A1
+    dict_id: A2
+  客户类型:
+    attr_code: 客户类型
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A3
+  客户状态:
+    attr_code: 客户状态
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A4
+  客户行业:
+    attr_code: 客户行业
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A5
+  客户规模:
+    attr_code: 客户规模
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A6
+  客户地区:
+    attr_code: 客户地区
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A7
+  客户性质:
+    attr_code: 客户性质
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A8
+  客户来源渠道:
+    attr_code: 客户来源渠道
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A9
+  客户优先级:
+    attr_code: 客户优先级
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A10
+  客户信用等级:
+    attr_code: 客户信用等级
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A11
+  客户价值分层:
+    attr_code: 客户价值分层
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A12
+  客户生命周期:
+    attr_code: 客户生命周期
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A13
+  客户接触方式:
+    attr_code: 客户接触方式
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A14
+  客户意向度:
+    attr_code: 客户意向度
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A15
+  客户决策权限:
+    attr_code: 客户决策权限
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A16
+  客户跟进阶段:
+    attr_code: 客户跟进阶段
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A17
+  客户满意度:
+    attr_code: 客户满意度
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A18
+  客户风险等级:
+    attr_code: 客户风险等级
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A19
+  客户推荐意愿:
+    attr_code: 客户推荐意愿
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A20
+  客户投诉记录:
+    attr_code: 客户投诉记录
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A21
+  客户黑名单:
+    attr_code: 客户黑名单
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: A22
+  产品偏好:
+    attr_code: 产品偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B1
+  服务偏好:
+    attr_code: 服务偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B2
+  沟通偏好:
+    attr_code: 沟通偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B3
+  价格敏感度:
+    attr_code: 价格敏感度
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B4
+  品牌偏好:
+    attr_code: 品牌偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B5
+  购买频次偏好:
+    attr_code: 购买频次偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B6
+  支付方式偏好:
+    attr_code: 支付方式偏好
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B7
+  配送方式偏好:
+    attr_code: 配送方式偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B8
+  促销敏感度:
+    attr_code: 促销敏感度
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B9
+  渠道偏好:
+    attr_code: 渠道偏好
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B10
+  时间偏好:
+    attr_code: 时间偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B11
+  社交媒体活跃度:
+    attr_code: 社交媒体活跃度
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B12
+  内容偏好:
+    attr_code: 内容偏好
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B13
+  活动偏好:
+    attr_code: 活动偏好
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B14
+  会员等级:
+    attr_code: 会员等级
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: B15
+  购买行为:
+    attr_code: 购买行为
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C1
+  咨询行为:
+    attr_code: 咨询行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C2
+  投诉行为:
+    attr_code: 投诉行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C3
+  退款行为:
+    attr_code: 退款行为
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C4
+  复购行为:
+    attr_code: 复购行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C5
+  浏览行为:
+    attr_code: 浏览行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C6
+  收藏行为:
+    attr_code: 收藏行为
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C7
+  分享行为:
+    attr_code: 分享行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C8
+  评价行为:
+    attr_code: 评价行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C9
+  签收行为:
+    attr_code: 签收行为
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C10
+  退货行为:
+    attr_code: 退货行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C11
+  换货行为:
+    attr_code: 换货行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C12
+  使用行为:
+    attr_code: 使用行为
+    required: true
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C13
+  激活行为:
+    attr_code: 激活行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C14
+  到期行为:
+    attr_code: 到期行为
+    required: false
+    type: dict
+    sub_type: 下拉单选
+    dict_id: C15
+  备注:
+    attr_code: 备注
+    required: false
+    type: text
+    sub_type: 输入框
+  详细地址:
+    attr_code: 详细地址
+    required: false
+    type: text
+    sub_type: 输入框
+  公司名称:
+    attr_code: 公司名称
+    required: false
+    type: text
+    sub_type: 输入框
+  职位:
+    attr_code: 职位
+    required: false
+    type: text
+    sub_type: 输入框
+  身份证号:
+    attr_code: 身份证号
+    required: false
+    type: id_card
+    sub_type: 输入框
+  注册日期:
+    attr_code: 注册日期
+    required: true
+    type: date
+    sub_type: 输入框
+  最近购买日期:
+    attr_code: 最近购买日期
+    required: false
+    type: date
+    sub_type: 输入框
+  累计消费金额:
+    attr_code: 累计消费金额
+    required: false
+    type: number
+    sub_type: 输入框
+  购买次数:
+    attr_code: 购买次数
+    required: false
+    type: number
+    sub_type: 输入框
+  积分:
+    attr_code: 积分
+    required: false
+    type: number
+    sub_type: 输入框
