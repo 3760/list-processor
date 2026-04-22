@@ -434,6 +434,9 @@ class MainWindow(QMainWindow):
         self.file_inputs = {}
         self.file_labels = {}
         self.file_buttons = {}
+        
+        # [优化] 记录每个文件类型正在运行的读取线程和取消标志
+        self._file_load_threads = {}  # {file_type: {"thread": Thread, "cancel_flag": threading.Event}}
 
         # 文件配置：key, 标签, 提示, 是否必填
         file_configs = [
@@ -1576,17 +1579,36 @@ class MainWindow(QMainWindow):
 
         # [优化 v1.0.7] 将 Sheet 检测和文件信息获取都移至后台执行，避免 UI 卡顿
         if file_type in ("frontline", "third_party", "hw"):
+            # 取消旧线程（如果存在）
+            self._cancel_file_load_thread(file_type)
+            
             # 立即显示加载状态
             self._animate_file_info_updating(file_type)
             
             # [优化] 后台线程：同时获取 Sheet 列表和文件信息
             logger.debug(f"[_select_file] 启动后台线程: 检测Sheet + 获取文件信息")
+            
+            # 创建取消标志
+            import threading
+            cancel_flag = threading.Event()
+            
             def _fetch_file_and_sheet_async():
                 t0 = time.time()
+                
+                # 检查是否被取消
+                if cancel_flag.is_set():
+                    logger.debug(f"[_fetch_file_and_sheet_async] 线程已被取消，退出")
+                    return
                 
                 # 1. 先获取 Sheet 列表
                 logger.info(f"[_fetch_file_and_sheet_async] [1/4] 开始获取 Sheet 列表...")
                 sheet_names = self._get_excel_sheet_names_from_xml(file_path)
+                
+                # 检查是否被取消
+                if cancel_flag.is_set():
+                    logger.debug(f"[_fetch_file_and_sheet_async] 获取Sheet后被取消，退出")
+                    return
+                
                 logger.info(f"[_fetch_file_and_sheet_async] [1/4] Sheet 列表: {sheet_names}，耗时: {time.time()-t0:.3f}s")
                 
                 # 2. 确定要使用的 sheet
@@ -1625,9 +1647,14 @@ class MainWindow(QMainWindow):
                     Q_ARG(object, selected_sheet),
                     Q_ARG(str, basename))
 
-            import threading
             thread = threading.Thread(target=_fetch_file_and_sheet_async, daemon=True)
             thread.start()
+            
+            # 记录线程，用于后续取消
+            self._file_load_threads[file_type] = {
+                "thread": thread,
+                "cancel_flag": cancel_flag
+            }
 
         # 字典文件处理
         elif file_type == "dict":
@@ -1645,6 +1672,14 @@ class MainWindow(QMainWindow):
             self.file_labels[file_type].setText("✅ 字段规范已加载")
             self._animate_file_info_success(file_type)
             self._log_message("INFO", f"已加载字段规范: {basename}")
+
+    def _cancel_file_load_thread(self, file_type: str):
+        """[优化] 取消指定文件类型的读取线程"""
+        if file_type in self._file_load_threads:
+            old_thread_info = self._file_load_threads[file_type]
+            old_thread_info["cancel_flag"].set()  # 设置取消标志
+            logger.debug(f"[_cancel_file_load_thread] 已取消旧线程: {file_type}")
+            del self._file_load_threads[file_type]
 
     def _animate_file_info_updating(self, file_type: str):
         """
