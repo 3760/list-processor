@@ -534,38 +534,83 @@ def generate_field_spec_file():
 
 # ========== 8. 生成数据字典文件 ==========
 def generate_data_dict_file():
-    """生成数据字典Excel文件"""
-    rows = []
+    """
+    生成数据字典Excel文件（参考 租户字典导入模版.xlsx 格式）。
+    
+    格式：每个字典占 2 列（Code、Details），列间用空列分隔
+    - 第1行：dict_id（A1、A2...）
+    - 第2行：字典名称（客户来源、客户等级...）
+    - 第3行：Code、Details 表头
+    - 第4行起：数据
+    """
+    from openpyxl import Workbook
+    
+    wb = Workbook()
+    ws = wb.active
+    
+    # dict_id 到中文名的映射
+    dict_name_map = {
+        "A1": "客户来源", "A2": "客户等级", "A3": "客户类型", "A4": "客户状态",
+        "A5": "客户行业", "A6": "客户规模", "A7": "客户地区", "A8": "客户性质",
+        "A9": "客户来源渠道", "A10": "客户优先级", "A11": "客户信用等级", "A12": "客户价值分层",
+        "A13": "客户生命周期", "A14": "客户接触方式", "A15": "客户意向度", "A16": "客户决策权限",
+        "A17": "客户跟进阶段", "A18": "客户满意度", "A19": "客户风险等级", "A20": "客户推荐意愿",
+        "A21": "客户投诉记录", "A22": "客户黑名单",
+        "B1": "产品偏好", "B2": "服务偏好", "B3": "沟通偏好", "B4": "价格敏感度",
+        "B5": "品牌偏好", "B6": "购买频次偏好", "B7": "支付方式偏好", "B8": "配送方式偏好",
+        "B9": "促销敏感度", "B10": "渠道偏好", "B11": "时间偏好", "B12": "社交媒体活跃度",
+        "B13": "内容偏好", "B14": "活动偏好", "B15": "会员等级",
+        "C1": "购买行为", "C2": "咨询行为", "C3": "投诉行为", "C4": "退款行为",
+        "C5": "复购行为", "C6": "浏览行为", "C7": "收藏行为", "C8": "分享行为",
+        "C9": "评价行为", "C10": "签收行为", "C11": "退货行为", "C12": "换货行为",
+        "C13": "使用行为", "C14": "激活行为", "C15": "到期行为",
+    }
+    
+    # code 前缀映射
+    code_map = {
+        "A1": "SRC", "A2": "LVL", "A3": "TYPE", "A4": "STAT",
+        "A5": "IND", "A6": "SIZE", "A7": "REG", "A8": "NATURE",
+        "A9": "CHNL", "A10": "PRI", "A11": "CRED", "A12": "VAL",
+        "A13": "LC", "A14": "CON", "A15": "INT", "A16": "AUTH",
+        "A17": "STAGE", "A18": "SAT", "A19": "RISK", "A20": "REC",
+        "A21": "CMP", "A22": "BLK",
+        "B1": "PROD", "B2": "SVC", "B3": "COMM", "B4": "PRICE",
+        "B5": "BRAND", "B6": "FREQ", "B7": "PAY", "B8": "DLV",
+        "B9": "PROM", "B10": "CHAN", "B11": "TIME", "B12": "SOC",
+        "B13": "CONT", "B14": "EVT", "B15": "MEM",
+        "C1": "BUY", "C2": "INQ", "C3": "CMP", "C4": "REF",
+        "C5": "REP", "C6": "BRW", "C7": "FAV", "C8": "SHR",
+        "C9": "REV", "C10": "SGN", "C11": "RET", "C12": "EXC",
+        "C13": "USE", "C14": "ACT", "C15": "EXP"
+    }
+    
+    # 按顺序遍历每个字典，写入 2 列（Code、Details），列间用空列分隔
+    col_idx = 0
     for dict_id in sorted(DATA_DICT.keys()):
+        dict_name = dict_name_map.get(dict_id, dict_id)
         values = DATA_DICT[dict_id]
-        for detail in values:
-            # 生成对应的Code
-            code_map = {
-                "A1": "SRC", "A2": "LVL", "A3": "TYPE", "A4": "STAT",
-                "A5": "IND", "A6": "SIZE", "A7": "REG", "A8": "NATURE",
-                "A9": "CHNL", "A10": "PRI", "A11": "CRED", "A12": "VAL",
-                "A13": "LC", "A14": "CON", "A15": "INT", "A16": "AUTH",
-                "A17": "STAGE", "A18": "SAT", "A19": "RISK", "A20": "REC",
-                "A21": "CMP", "A22": "BLK",
-                "B1": "PROD", "B2": "SVC", "B3": "COMM", "B4": "PRICE",
-                "B5": "BRAND", "B6": "FREQ", "B7": "PAY", "B8": "DLV",
-                "B9": "PROM", "B10": "CHAN", "B11": "TIME", "B12": "SOC",
-                "B13": "CONT", "B14": "EVT", "B15": "MEM",
-                "C1": "BUY", "C2": "INQ", "C3": "CMP", "C4": "REF",
-                "C5": "REP", "C6": "BRW", "C7": "FAV", "C8": "SHR",
-                "C9": "REV", "C10": "SGN", "C11": "RET", "C12": "EXC",
-                "C13": "USE", "C14": "ACT", "C15": "EXP"
-            }
-            prefix = code_map.get(dict_id, dict_id)
-            rows.append({
-                "字典ID": dict_id,
-                "Code": f"{prefix}_{values.index(detail)+1:02d}",
-                "Details": detail
-            })
-
-    df = pd.DataFrame(rows)
+        prefix = code_map.get(dict_id, dict_id)
+        
+        # 第1行：dict_id
+        ws.cell(row=1, column=col_idx + 1, value=dict_id)
+        
+        # 第2行：字典名称
+        ws.cell(row=2, column=col_idx + 1, value=dict_name)
+        
+        # 第3行：Code、Details 表头
+        ws.cell(row=3, column=col_idx + 1, value="Code")
+        ws.cell(row=3, column=col_idx + 2, value="Details")
+        
+        # 数据行（第4行起）
+        for row_offset, detail in enumerate(values):
+            code = f"{prefix}_{row_offset + 1:02d}"
+            ws.cell(row=4 + row_offset, column=col_idx + 1, value=code)
+            ws.cell(row=4 + row_offset, column=col_idx + 2, value=detail)
+        
+        col_idx += 2  # 每个字典占 2 列（Code、Details）
+    
     output_path = os.path.join(BASE_PATH, "data_dict_百万级.xlsx")
-    df.to_excel(output_path, index=False, engine='openpyxl')
+    wb.save(output_path)
     print(f"数据字典文件已生成: {output_path}")
 
 # ========== 主程序 ==========
@@ -583,15 +628,15 @@ if __name__ == "__main__":
 
     # 生成一线名单
     print("\n[3/5] 生成一线名单...")
-    generate_dataset(n_rows=1000000, filename="一线名单_百万.xlsx")
+    #generate_dataset(n_rows=200000, filename="一线名单_20万.xlsx")
 
     # 生成三方名单
     print("\n[4/5] 生成三方名单...")
-    generate_dataset(n_rows=1000000, filename="三方名单_百万.xlsx")
+    #generate_dataset(n_rows=200000, filename="三方名单_20万.xlsx")
 
     # 生成HW名单
     print("\n[5/5] 生成HW名单...")
-    generate_dataset(n_rows=1000000, filename="HW名单_百万.xlsx")
+    #generate_dataset(n_rows=200000, filename="HW名单_20万.xlsx")
 
     print("\n" + "=" * 60)
     print("所有测试数据生成完成！")

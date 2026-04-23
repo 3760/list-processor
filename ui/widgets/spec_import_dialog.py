@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
 from infra.exceptions import ValidationError, DataQualityError
 from infra.log_manager import get_logger
 from ui.widgets.spec_parser import parse_spec_excel, write_spec_yaml
+from ui.styles.button_styles import BUTTON_STYLE_SECONDARY, BUTTON_STYLE_PRIMARY
 
 logger = get_logger(__name__)
 
@@ -95,22 +96,7 @@ class SpecImportDialog(QDialog):
         self.file_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         self.select_file_btn = QPushButton("选择属性导入模版...")
-        self.select_file_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FFFFFF;
-                color: #374151;
-                border: 1px solid #D1D5DB;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 16px;
-            }
-            QPushButton:hover {
-                background-color: #F9FAFB;
-                border-color: #9CA3AF;
-            }
-        """)
+        self.select_file_btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.select_file_btn.clicked.connect(self._on_select_file)
 
         file_layout.addWidget(QLabel("文件："))
@@ -142,8 +128,13 @@ class SpecImportDialog(QDialog):
         )
         self.ok_btn = button_box.button(QDialogButtonBox.Ok)
         self.ok_btn.setText("确认导入")
+        self.ok_btn.setStyleSheet(BUTTON_STYLE_PRIMARY)
         self.ok_btn.setEnabled(False)
         self.ok_btn.clicked.connect(self._on_confirm_import)
+
+        # 取消按钮使用次要样式
+        cancel_btn = button_box.button(QDialogButtonBox.Cancel)
+        cancel_btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
 
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)

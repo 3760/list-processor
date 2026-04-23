@@ -141,8 +141,7 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
         # [PERF] 20260423: constant_memory=True 逐行写入，减少内存占用
         # [FIX] 异常安全：确保 Workbook 正确关闭
         logger.info(f"[F7] 开始创建 {config['label']} 结果文件：{filename}")
-        #wb = xlsxwriter.Workbook(file_path, options={'constant_memory': True})
-        wb = xlsxwriter.Workbook(file_path)
+        wb = xlsxwriter.Workbook(file_path, options={'constant_memory': True})
         try:
             # 写入各 Sheet
             _write_single_source_sheets(wb, ctx, source_key, config["label"], progress_callback)
@@ -205,11 +204,14 @@ def _write_single_source_sheets(
         if progress_callback:
             progress_callback("F7", 85)  # [方案C] 子任务进度
 
-    # 5. 重复名单结果 Sheet —— 仅一线有此 Sheet
-    if source_key == "yixian":
-        _write_repeat_records_sheet_for_source(wb, ctx)
-        if progress_callback:
-            progress_callback("F7", 100)  # [方案C] 子任务进度
+    # [问题2-Sheet合并] 移除单独的重复名单结果 Sheet
+    # 重复数据已合并到"原始数据" Sheet中，包含以下新增列：
+    # - _重复键值、_出现次数、_重复标记、_行号、内部去重结果
+    # 原代码已注释保留，便于后续需要单独Sheet时恢复
+    # if source_key == "yixian":
+    #     _write_repeat_records_sheet_for_source(wb, ctx)
+    if progress_callback:
+        progress_callback("F7", 100)  # [方案C] 子任务进度
 
     logger.info(f"[F7] ▶ {label} 的所有 Sheet 写入完成")
 
@@ -366,15 +368,12 @@ def _write_summary_sheet_for_source(
             rows.append(["去重未知数（空值）", f6_result.get("skip", 0)])
     
     # [FIX Bug 1] 表头单独写入，数据行从索引1开始
-    header_format = _create_header_format(wb)
-    cell_format = _create_cell_format(wb)  # [FIX #1] 为数据行添加格式
     for col_idx, col_name in enumerate(rows[0]):
-        ws.write(0, col_idx, col_name, header_format)
-    
-    # 数据行（应用单元格格式）
+        ws.write(0, col_idx, col_name)
+
+    # 数据行
     for row_idx, row_data in enumerate(rows[1:], start=1):
-        for col_idx, value in enumerate(row_data):
-            ws.write(row_idx, col_idx, value, cell_format)  # [FIX #1] 添加 cell_format
+        ws.write_row(row_idx, 0, row_data)
     
     # [LOG] 记录处理摘要写入完成
     logger.debug(f"[F7] 处理摘要 Sheet 写入完成，共 {len(rows)} 行")
@@ -404,26 +403,23 @@ def _write_error_records_sheet_for_source(
         return
 
     ws = wb.add_worksheet("合规性检查结果")
-    
+
     # [PERF] xlsxwriter 高效写入：先写表头，再批量写数据
     columns = list(err.columns)
-    logger.info(f"[F7]   → 合规性检查结果 Sheet：{len(err)} 行 × {len(columns)} 列")
-    logger.info(f"[F7]     列名：{columns}")
-    
-    # [PERF] 使用工厂函数
-    header_format = _create_header_format(wb)
-    cell_format = _create_cell_format(wb)
-    
+    row_count = len(err)
+    total_cols = len(columns)
+    logger.info(f"[F7]   → 合规性检查结果 Sheet：{row_count} 行 × {total_cols} 列")
+
     # 写入表头（第0行）
     for col_idx, col_name in enumerate(columns):
-        ws.write(0, col_idx, col_name, header_format)
-    
+        ws.write(0, col_idx, col_name)
+
     # 批量写入数据行
-    row_idx = 1
-    for row_idx, row_data in enumerate(err.iter_rows(), start=1):
-        logger.info(f"[F7]     [{row_idx}/{len(err)}] 写入行")
-        for col_idx, value in enumerate(row_data):
-            ws.write(row_idx, col_idx, value, cell_format)
+    LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
+    for row_num, row_data in enumerate(err.iter_rows(), start=1):
+        ws.write_row(row_num, 0, row_data)
+        if row_num % LOG_INTERVAL == 0:
+            logger.info(f"[F7]     已写入 {row_num}/{row_count} 行")
     
     logger.debug(f"[F7]   ✓ 合规性检查结果 Sheet 完成，{len(err)} 行错误数据")
 
@@ -451,27 +447,21 @@ def _write_dict_validation_sheet(wb, dict_err_df: pl.DataFrame) -> None:
     [PERF] 20260422: 使用 xlsxwriter 写入
     """
     ws = wb.add_worksheet("字典校验结果")
-    
+
     columns = list(dict_err_df.columns)
-    logger.info(f"[F7]   → 字典校验结果 Sheet：{len(dict_err_df)} 行 × {len(columns)} 列")
-    logger.info(f"[F7]     列名：{columns}")
-    
-    # [PERF] 使用工厂函数
-    header_format = _create_header_format(wb, '#B4C6E7')  # 浅蓝色表头
-    cell_format = _create_cell_format(wb)
-    
+    row_count = len(dict_err_df)
+    logger.info(f"[F7]   → 字典校验结果 Sheet：{row_count} 行 × {len(columns)} 列")
+
     # 写入表头
     for col_idx, col_name in enumerate(columns):
-        ws.write(0, col_idx, col_name, header_format)
-    
+        ws.write(0, col_idx, col_name)
+
     # 批量写入数据行
-    for row_idx, row_data in enumerate(dict_err_df.iter_rows(), start=1):
-        logger.info(f"[F7]     [{row_idx}/{len(dict_err_df)}] 写入行")
-        for col_idx, value in enumerate(row_data):
-            ws.write(row_idx, col_idx, value, cell_format)
-    
-    # [优化] 为新增列添加浅蓝色底色
-    _apply_generated_column_style(ws, columns)
+    LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
+    for row_num, row_data in enumerate(dict_err_df.iter_rows(), start=1):
+        ws.write_row(row_num, 0, row_data)
+        if row_num % LOG_INTERVAL == 0:
+            logger.info(f"[F7]     已写入 {row_num}/{row_count} 行")
 
 
 def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
@@ -507,26 +497,22 @@ def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
         row_idx = 0
         
         logger.debug(f"[F7]   → 重复名单结果 Sheet：{len(repeat_data)} 行（完整详情模式）")
-        
-        # [PERF] 使用工厂函数创建格式对象
-        header_format = _create_header_format(wb)
-        cell_format = _create_cell_format(wb)
-        
+
         if isinstance(repeat_data, pl.DataFrame):
             columns = list(repeat_data.columns)
             # 写入表头
             for col_idx, col_name in enumerate(columns):
-                ws.write(row_idx, col_idx, col_name, header_format)
+                ws.write(row_idx, col_idx, col_name)
             row_idx += 1
-            # [PERF] 20260423: 使用 write_column() 批量写入替代逐行写入
+            # [PERF] 20260424: 逐行写入，兼容 constant_memory 模式
             data_row_count = len(repeat_data)
             logger.info(f"[F7]   → 重复名单结果 Sheet：{data_row_count} 行 × {len(columns)} 列")
-            logger.info(f"[F7]     列名：{columns}")
-            for col_idx, col_name in enumerate(columns):
-                logger.info(f"[F7]     [{col_idx + 1}/{len(columns)}] 写入列: {col_name}")
-                col_data = repeat_data[col_name].to_list()
-                ws.write_column(row_idx, col_idx, col_data, cell_format)
-            row_idx += data_row_count  # 更新 row_idx 用于日志
+            LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
+            for row_num, row_data in enumerate(repeat_data.iter_rows(), start=1):
+                ws.write_row(row_idx, 0, row_data)
+                row_idx += 1
+                if row_num % LOG_INTERVAL == 0:
+                    logger.info(f"[F7]     已写入 {row_num}/{data_row_count} 行")
         else:
             # 如果是其他格式（如 list of dicts）
             for item in repeat_data:
@@ -534,25 +520,21 @@ def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
                     if columns is None:
                         columns = list(item.keys())
                         for col_idx, col_name in enumerate(columns):
-                            ws.write(row_idx, col_idx, col_name, header_format)
+                            ws.write(row_idx, col_idx, col_name)
                         row_idx += 1
                     for col_idx, value in enumerate(item.values()):
-                        ws.write(row_idx, col_idx, value, cell_format)
-                    row_idx += 1
+                        ws.write_row(row_idx, 0, list(item.values()))
+                        row_idx += 1
                 elif hasattr(item, '__iter__'):
                     row_list = list(item)
                     if columns is None:
                         columns = [f"列{i+1}" for i in range(len(row_list))]
                         for col_idx, col_name in enumerate(columns):
-                            ws.write(row_idx, col_idx, col_name, header_format)
+                            ws.write(row_idx, col_idx, col_name)
                         row_idx += 1
-                    for col_idx, value in enumerate(row_list):
-                        ws.write(row_idx, col_idx, value, cell_format)
+                    ws.write_row(row_idx, 0, row_list)
                     row_idx += 1
-        
-        # [优化] 为新增列添加浅蓝色底色
-        if columns:
-            _apply_generated_column_style(ws, columns)
+
         logger.debug(f"[F7]   ✓ 重复名单结果 Sheet 完成，{row_idx - 1} 行数据")
     elif has_dedup:
         # 无 rejected 数据但有去重标记时，写统计摘要
@@ -571,13 +553,9 @@ def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
             ["重复数", dup_count],
         ]
         
-        # [PERF] xlsxwriter 批量写入
-        header_format = _create_header_format(wb)
-        cell_format = _create_cell_format(wb)
+        # xlsxwriter 批量写入
         for row_idx, row_data in enumerate(rows):
-            for col_idx, value in enumerate(row_data):
-                fmt = header_format if row_idx == 0 else cell_format
-                ws.write(row_idx, col_idx, value, fmt)
+            ws.write_row(row_idx, 0, row_data)
         logger.debug(f"[F7]   ✓ 重复名单结果 Sheet 完成（统计摘要）")
 
 
@@ -623,11 +601,23 @@ def _write_data_sheet(
 ) -> None:
     """
     写入名单数据 Sheet。
-    
-    [优化] 新增列使用浅蓝色底色（#B4C6E7表头, #E2EFDA数据行），便于与原始数据列区分。
+
+    [问题2-Sheet合并] 修改：保留所有新增列（_开头列、Code列等），
+    合并到"原始数据" Sheet中输出。
+
+    新增列说明：
+    - _重复键值：去重字段实际值
+    - _出现次数：该值出现总次数
+    - _重复标记：原始/重复/未知
+    - _行号：1-based 原始行号
+    - 内部去重结果：去重标注
+    - 是否已在一线名单：跨名单标注
+    - 是否已在三方名单：跨名单标注
+    - {field}_Code：字典上码结果列
+
     [PERF] 20260422: 使用 xlsxwriter 写入，批量缓冲高效写入
-    [PERF] 20260423: 使用 write_column() 按列批量写入，替代逐 cell 写入
-    
+    [PERF] 20260424: 还原为逐行写入，兼容 constant_memory 模式
+
     Parameters
     ----------
     wb : xlsxwriter.Workbook
@@ -639,50 +629,29 @@ def _write_data_sheet(
     """
     ws = wb.add_worksheet(sheet_name)
 
-    # [FIX] 排除内部附加列，只输出原始数据字段
-    output_columns = [c for c in df.columns if not c.startswith("_")]
-    output_df = df.select(output_columns)
-    
-    row_count = len(output_df)
-    
-    # [LOG] 记录开始写入数据
-    logger.debug(f"[F7]   → 开始写入 {sheet_name}，{row_count} 行 × {len(output_columns)} 列")
+    # [问题2-Sheet合并] 保留所有列，包括新增列（_开头、Code列等）
+    output_columns = list(df.columns)
+    output_df = df
 
-    # [PERF] 预先创建格式对象（避免循环内重复创建）
-    header_format_orig = _create_header_format(wb)
-    header_format_gen = _create_header_format(wb, '#B4C6E7')  # 浅蓝色
-    cell_format_orig = _create_cell_format(wb)
-    cell_format_gen = _create_cell_format(wb, '#E2EFDA')  # 浅绿色
+    row_count = len(output_df)
+    total_cols = len(output_columns)
+
+    logger.info(f"[F7]   → 开始写入 {sheet_name}，{row_count} 行 × {total_cols} 列")
 
     # 写入表头（第0行）
     for col_idx, col_name in enumerate(output_columns):
-        fmt = header_format_gen if _is_generated_column(col_name) else header_format_orig
-        ws.write(0, col_idx, col_name, fmt)
-    
-    # [PERF] 20260423: 预分类列索引，消除循环内判断，使用 write_column() 批量写入
-    # 分类：原始列 vs 生成列（生成列需要浅绿色格式）
-    gen_cols_set = {c for c in output_columns if _is_generated_column(c)}
-    orig_cols = [c for c in output_columns if c not in gen_cols_set]  # 原始列保持顺序
-    gen_cols = [c for c in gen_cols_set]  # 生成列按出现顺序
-    
-    # 按列批量写入 - 原始列
-    total_cols = len(orig_cols) + len(gen_cols)
-    logger.info(f"[F7]   → 开始按列写入 {sheet_name}，共 {total_cols} 列（原始列: {len(orig_cols)}, 生成列: {len(gen_cols)}）")
-    for col_idx, col_name in enumerate(orig_cols):
-        logger.info(f"[F7]     [{col_idx + 1}/{total_cols}] 写入列: {col_name}")
-        col_data = output_df[col_name].to_list()
-        ws.write_column(1, col_idx, col_data, cell_format_orig)
-    
-    # 按列批量写入 - 生成列（从原始列之后开始）
-    start_col_idx = len(orig_cols)
-    for col_idx, col_name in enumerate(gen_cols):
-        logger.info(f"[F7]     [{start_col_idx + col_idx + 1}/{total_cols}] 写入列: {col_name}")
-        col_data = output_df[col_name].to_list()
-        ws.write_column(1, start_col_idx + col_idx, col_data, cell_format_gen)
-    
-    # [PERF] 记录写入完成
+        ws.write(0, col_idx, col_name)
+
+    # 逐行写入数据（兼容 constant_memory 模式）
+    LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
+    for row_idx, row_data in enumerate(output_df.iter_rows(), start=1):
+        ws.write_row(row_idx, 0, row_data)
+
+        # 每 10000 行打印一次进度日志
+        if row_idx % LOG_INTERVAL == 0:
+            logger.info(f"[F7]     已写入 {row_idx}/{row_count} 行 ({row_idx * 100 // row_count}%)")
+
     logger.info(f"[F7]   ✓ {sheet_name} 写入完成，{row_count} 行 × {total_cols} 列")
-    logger.debug(f"[F7]   ✓ {sheet_name} 写入完成，{row_count} 行数据已缓冲")
 
 
 def _write_error_records_sheet(wb, ctx: ProcessContext) -> None:

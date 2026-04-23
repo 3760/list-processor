@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont
 
 from ui.widgets.version_manager import VersionManager
+from ui.styles.button_styles import BUTTON_STYLE_SECONDARY
 
 
 class VersionDialog(QDialog):
@@ -77,7 +78,7 @@ class VersionDialog(QDialog):
         btn_layout.addStretch()
 
         btn_close = QPushButton("关闭")
-        btn_close.setMinimumWidth(100)
+        btn_close.setStyleSheet(BUTTON_STYLE_SECONDARY)
         btn_close.clicked.connect(self.accept)
         btn_layout.addWidget(btn_close)
 
@@ -270,6 +271,7 @@ class VersionAddDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
+        # [问题3] 统一按钮样式标准：补充 pressed 和 disabled 状态
         btn_style = """
             QPushButton {
                 background-color: #FFFFFF;
@@ -285,8 +287,17 @@ class VersionAddDialog(QDialog):
                 background-color: #F9FAFB;
                 border-color: #9CA3AF;
             }
+            QPushButton:pressed {
+                background-color: #F3F4F6;
+            }
+            QPushButton:disabled {
+                background-color: #F3F4F6;
+                color: #9CA3AF;
+                border-color: #E5E7EB;
+            }
         """
         
+        # [问题3] 统一按钮样式标准：补充 pressed 和 disabled 状态
         btn_primary_style = """
             QPushButton {
                 background-color: #2563EB;
@@ -300,6 +311,13 @@ class VersionAddDialog(QDialog):
             }
             QPushButton:hover {
                 background-color: #3B82F6;
+            }
+            QPushButton:pressed {
+                background-color: #1D4ED8;
+            }
+            QPushButton:disabled {
+                background-color: #9CA3AF;
+                color: #FFFFFF;
             }
         """
 

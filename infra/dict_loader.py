@@ -43,6 +43,8 @@ class DictLoader:
         字典文件路径
     md5_hash : str
         当前字典文件的 MD5 哈希值
+    file_mtime : float
+        字典文件的修改时间（Unix时间戳）
     mappings : Dict[str, Dict[str, str]]
         内存字典映射 {字典名: {代码值: 显示值}}
     """
@@ -55,12 +57,15 @@ class DictLoader:
             )
         self.file_path = file_path
         self.md5_hash: Optional[str] = None
+        self.file_mtime: Optional[float] = None  # [问题5] 文件修改时间
         self.mappings: Dict[str, Dict[str, str]] = {}
         self._dict_names: List[str] = []
         self._load()
 
     def _load(self):
         """内部加载逻辑"""
+        # [问题5] 记录文件修改时间
+        self.file_mtime = os.path.getmtime(self.file_path)
         self.md5_hash = self._compute_md5()
         # [FIX #10] 使用 read_only=True 提升大文件加载性能，减少内存占用
         workbook = openpyxl.load_workbook(self.file_path, data_only=True, read_only=True)

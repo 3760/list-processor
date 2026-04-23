@@ -83,8 +83,8 @@ QLineEdit:disabled {
 
 /* ==================== 按钮 ==================== */
 
-/* 主按钮 - 开始处理 */
-QPushButton#btnStart, QPushButton#btnPrimary {
+/* 开始处理按钮（btnStart）- 参照 button_styles.py BUTTON_STYLE_PRIMARY_START */
+QPushButton#btnStart {
     background-color: #2563EB;
     color: #FFFFFF;
     border: none;
@@ -96,20 +96,45 @@ QPushButton#btnStart, QPushButton#btnPrimary {
     padding: 0 24px;
 }
 
-QPushButton#btnStart:hover, QPushButton#btnPrimary:hover {
+QPushButton#btnStart:hover {
     background-color: #3B82F6;
 }
 
-QPushButton#btnStart:pressed, QPushButton#btnPrimary:pressed {
+QPushButton#btnStart:pressed {
     background-color: #1D4ED8;
 }
 
-QPushButton#btnStart:disabled, QPushButton#btnPrimary:disabled {
+QPushButton#btnStart:disabled {
     background-color: #E5E7EB;
     color: #9CA3AF;
 }
 
-/* 次要按钮 - 浏览/导入等 */
+/* 主按钮（btnPrimary）- 参照 button_styles.py BUTTON_STYLE_PRIMARY */
+QPushButton#btnPrimary {
+    background-color: #2563EB;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 36px;
+    padding: 0 24px;
+}
+
+QPushButton#btnPrimary:hover {
+    background-color: #3B82F6;
+}
+
+QPushButton#btnPrimary:pressed {
+    background-color: #1D4ED8;
+}
+
+QPushButton#btnPrimary:disabled {
+    background-color: #9CA3AF;
+    color: #FFFFFF;
+}
+
+/* 次要按钮（浏览、关闭、取消等）- 参照 button_styles.py BUTTON_STYLE_SECONDARY */
 QPushButton {
     background-color: #FFFFFF;
     color: #374151;
@@ -131,6 +156,33 @@ QPushButton:pressed {
 }
 
 QPushButton:disabled {
+    background-color: #F3F4F6;
+    color: #9CA3AF;
+    border-color: #E5E7EB;
+}
+
+/* QMessageBox 按钮（子选择器，继承次要按钮样式） */
+QMessageBox QPushButton {
+    background-color: #FFFFFF;
+    color: #374151;
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 36px;
+    padding: 0 16px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #F9FAFB;
+    border-color: #9CA3AF;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #F3F4F6;
+}
+
+QMessageBox QPushButton:disabled {
     background-color: #F3F4F6;
     color: #9CA3AF;
     border-color: #E5E7EB;

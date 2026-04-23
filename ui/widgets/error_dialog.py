@@ -24,6 +24,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ui.styles.button_styles import BUTTON_STYLE_PRIMARY, BUTTON_STYLE_SECONDARY
+
 
 class CriticalErrorDialog(QDialog):
     """
@@ -68,24 +70,7 @@ class CriticalErrorDialog(QDialog):
         button_layout.addStretch()
 
         self.ok_btn = QPushButton("确定")
-        self.ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 24px;
-            }
-            QPushButton:hover {
-                background-color: #3B82F6;
-            }
-            QPushButton:pressed {
-                background-color: #1D4ED8;
-            }
-        """)
+        self.ok_btn.setStyleSheet(BUTTON_STYLE_PRIMARY)
         self.ok_btn.clicked.connect(self.accept)
         self.ok_btn.setDefault(True)
         button_layout.addWidget(self.ok_btn)
@@ -135,24 +120,7 @@ class ValidationErrorDialog(QDialog):
         button_layout.addStretch()
 
         self.ok_btn = QPushButton("确定")
-        self.ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 24px;
-            }
-            QPushButton:hover {
-                background-color: #3B82F6;
-            }
-            QPushButton:pressed {
-                background-color: #1D4ED8;
-            }
-        """)
+        self.ok_btn.setStyleSheet(BUTTON_STYLE_PRIMARY)
         self.ok_btn.clicked.connect(self.accept)
         self.ok_btn.setDefault(True)
         button_layout.addWidget(self.ok_btn)
@@ -191,36 +159,19 @@ class LogViewerWidget(QWidget):
 
         # 按钮行
         button_layout = QHBoxLayout()
-        
-        btn_style = """
-            QPushButton {
-                background-color: #FFFFFF;
-                color: #374151;
-                border: 1px solid #D1D5DB;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 16px;
-            }
-            QPushButton:hover {
-                background-color: #F9FAFB;
-                border-color: #9CA3AF;
-            }
-        """
 
         self.refresh_btn = QPushButton("🔄 刷新")
-        self.refresh_btn.setStyleSheet(btn_style)
+        self.refresh_btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.refresh_btn.clicked.connect(self._refresh_log)
         button_layout.addWidget(self.refresh_btn)
 
         self.open_dir_btn = QPushButton("📂 打开目录")
-        self.open_dir_btn.setStyleSheet(btn_style)
+        self.open_dir_btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.open_dir_btn.clicked.connect(self._open_log_dir)
         button_layout.addWidget(self.open_dir_btn)
 
         self.export_btn = QPushButton("💾 导出日志")
-        self.export_btn.setStyleSheet(btn_style)
+        self.export_btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.export_btn.clicked.connect(self._export_log)
         button_layout.addWidget(self.export_btn)
 

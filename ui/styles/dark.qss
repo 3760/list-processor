@@ -70,71 +70,63 @@ QLineEdit:disabled {
 
 /* ==================== 按钮 ==================== */
 
-/* 主按钮 - 开始处理 */
-QPushButton#btnStart, QPushButton#btnPrimary {
-    background-color: #3B82F6;
+/* 开始处理按钮（btnStart）- 参照 button_styles.py BUTTON_STYLE_PRIMARY_START */
+QPushButton#btnStart {
+    background-color: #2563EB;
     color: #FFFFFF;
     border: none;
     border-radius: 8px;
     font-size: 14px;
     font-weight: 600;
-    min-height: 44px;
     min-width: 200px;
+    min-height: 44px;
     padding: 0 24px;
-    margin-bottom: 0px;
 }
 
-QPushButton#btnStart:hover, QPushButton#btnPrimary:hover {
-    background-color: #60A5FA;
-    margin-bottom: 1px;
-    margin-top: 0px;
+QPushButton#btnStart:hover {
+    background-color: #3B82F6;
 }
 
-QPushButton#btnStart:pressed, QPushButton#btnPrimary:pressed {
+QPushButton#btnStart:pressed {
     background-color: #1D4ED8;
-    margin-top: 1px;
-    margin-bottom: 0px;
 }
 
-QPushButton#btnStart:disabled, QPushButton#btnPrimary:disabled {
+QPushButton#btnStart:disabled {
     background-color: #4B5563;
     color: #6B7280;
-    margin-bottom: 0px;
 }
 
-/* 次要按钮 - 取消 */
-QPushButton#btnCancel, QPushButton#btnSecondary {
-    background-color: #374151;
-    color: #D1D5DB;
-    border: 1px solid #4B5563;
-    border-radius: 8px;
+/* 主按钮（btnPrimary）- 参照 button_styles.py BUTTON_STYLE_PRIMARY */
+QPushButton#btnPrimary {
+    background-color: #2563EB;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
     min-height: 36px;
-    padding: 0 16px;
+    padding: 0 24px;
 }
 
-QPushButton#btnCancel:hover, QPushButton#btnSecondary:hover {
-    background-color: #4B5563;
-    border-color: #6B7280;
+QPushButton#btnPrimary:hover {
+    background-color: #3B82F6;
 }
 
-QPushButton#btnCancel:pressed, QPushButton#btnSecondary:pressed {
-    background-color: #4B5563;
+QPushButton#btnPrimary:pressed {
+    background-color: #1D4ED8;
 }
 
-QPushButton#btnCancel:disabled, QPushButton#btnSecondary:disabled {
-    background-color: #374151;
-    color: #6B7280;
-    border-color: #4B5563;
+QPushButton#btnPrimary:disabled {
+    background-color: #6B7280;
+    color: #FFFFFF;
 }
 
-/* 通用按钮样式 */
+/* 次要按钮（浏览、关闭、取消等）- 参照 button_styles.py BUTTON_STYLE_SECONDARY */
 QPushButton {
     background-color: #374151;
     color: #D1D5DB;
     border: 1px solid #4B5563;
-    border-radius: 8px;
+    border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
     min-height: 36px;
@@ -156,19 +148,31 @@ QPushButton:disabled {
     border-color: #4B5563;
 }
 
-/* 浏览/导入按钮 */
-QPushButton#btnBrowse {
-    min-width: 80px;
+/* QMessageBox 按钮（暗色主题下使用深色背景） */
+QMessageBox QPushButton {
+    background-color: #374151;
+    color: #D1D5DB;
+    border: 1px solid #4B5563;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
     min-height: 36px;
+    padding: 0 16px;
 }
 
-QPushButton#btnBrowse:hover {
+QMessageBox QPushButton:hover {
     background-color: #4B5563;
-    transform: scale(1.02);
+    border-color: #6B7280;
 }
 
-QPushButton#btnBrowse:pressed {
-    transform: scale(0.98);
+QMessageBox QPushButton:pressed {
+    background-color: #4B5563;
+}
+
+QMessageBox QPushButton:disabled {
+    background-color: #374151;
+    color: #6B7280;
+    border-color: #4B5563;
 }
 
 /* ==================== 下拉框 ==================== */

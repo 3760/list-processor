@@ -50,6 +50,7 @@ from ui.widgets.dedup_field_dialog import DedupFieldDialog
 from ui.widgets.version_dialog import VersionDialog, VersionAddDialog
 from ui.widgets.version_manager import VersionManager
 from ui.worker import ProcessingWorker
+from ui.styles.button_styles import BUTTON_STYLE_PRIMARY_START
 
 logger = get_logger(__name__)
 
@@ -297,6 +298,7 @@ class MainWindow(QMainWindow):
             "spec": None,           # 字段规范文件
         }
         self._dict_version_display = ""  # 标题栏字典版本显示
+        self._yixian_columns = []  # 一线文件列名缓存（用于去重字段下拉框）
 
         self._init_ui()
         self._init_status_bar()
@@ -334,7 +336,7 @@ class MainWindow(QMainWindow):
             # [FIX] 记录当前样式文件，便于主题变化检测
             self._current_qss = qss_filename
             logger.info(f"样式已加载: {qss_filename} (深色模式: {dark_mode})")
-    
+
     def _is_dark_mode(self) -> bool:
         """检测 macOS 深色模式"""
         try:
@@ -620,24 +622,30 @@ class MainWindow(QMainWindow):
         return group
 
     def _select_dedup_field(self):
-        """[20260420-老谈] ISSUE-12: 选择去重字段弹窗 [FIX] 智能推荐"""
-        # 先获取一线名单的列名
+        """[20260420-老谈] ISSUE-12: 选择去重字段弹窗 [FIX] 智能推荐 + 缓存优化"""
+        # 先获取一线名单的列名（优先使用缓存）
         yixian_path = self.file_paths.get("yixian")
         if not yixian_path:
             QMessageBox.warning(self, "提示", "请先选择一线人员名单文件")
             return
 
-        if str(yixian_path).lower().endswith('.csv'):
-            # CSV 文件直接用 polars 读取
-            import polars as pl
-            df_sample = pl.read_csv(yixian_path, nrows=1)
-            columns = df_sample.columns
+        # [缓存优化] 优先使用已缓存的列名
+        columns = getattr(self, '_yixian_columns', [])
+        if columns:
+            logger.debug(f"[_select_dedup_field] 使用缓存的列名，共 {len(columns)} 列")
         else:
-            # Excel 文件：使用用户选择的 sheet 获取列名
-            # [FIX v1.0.7] 从 _sheet_selections 获取用户选择的 sheet
-            selected_sheet = getattr(self, '_sheet_selections', {}).get("yixian")
-            logger.debug(f"[_select_dedup_field] 获取列名，sheet={selected_sheet}")
-            columns = self._get_excel_columns(yixian_path, selected_sheet)
+            # 缓存为空，重新读取文件获取列名
+            if str(yixian_path).lower().endswith('.csv'):
+                # CSV 文件直接用 polars 读取
+                import polars as pl
+                df_sample = pl.read_csv(yixian_path, nrows=1)
+                columns = df_sample.columns
+            else:
+                # Excel 文件：使用用户选择的 sheet 获取列名
+                # [FIX v1.0.7] 从 _sheet_selections 获取用户选择的 sheet
+                selected_sheet = getattr(self, '_sheet_selections', {}).get("yixian")
+                logger.debug(f"[_select_dedup_field] 获取列名，sheet={selected_sheet}")
+                columns = self._get_excel_columns(yixian_path, selected_sheet)
 
         if not columns:
             QMessageBox.warning(self, "错误", "无法读取文件列名")
@@ -708,6 +716,7 @@ class MainWindow(QMainWindow):
             指定要读取的 sheet 名称。如果为 None，则读取第一个 sheet。
             优先使用用户已选择的 sheet（从 self._sheet_selections 获取）
         """
+        import html
         import re, zipfile
         import time as time_module
 
@@ -842,7 +851,9 @@ class MainWindow(QMainWindow):
                     value = v_match.group(1) if v_match else ""
                 
                 if value:
-                    columns.append((col_to_num(col_ref), str(value)))
+                    # [FIX] 解码 HTML 实体编码（如 &#x59D4;&#x5458; -> 委员）
+                    value = html.unescape(str(value))
+                    columns.append((col_to_num(col_ref), value))
             
             # 按列顺序排序
             columns.sort(key=lambda x: x[0])
@@ -988,20 +999,22 @@ class MainWindow(QMainWindow):
         container = QWidget()
         container.setObjectName("resultBanner")
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        container.setMinimumHeight(HEIGHT_BANNER)
+        # [FIX] 移除固定高度限制，让 banner 自适应内容高度
 
         layout = QHBoxLayout(container)
         layout.setContentsMargins(*MARGIN_BANNER)
         layout.setSpacing(SPACING_BANNER)
+        layout.setStretchFactor(self, 0)  # 不拉伸
 
         # 图标
         self.banner_icon = QLabel()
         self.banner_icon.setFixedWidth(HEIGHT_CLOSE_BANNER)
+        self.banner_icon.setStyleSheet("background-color: transparent;")  # [FIX] 透明背景
         layout.addWidget(self.banner_icon)
 
         # 消息文本
         self.banner_message = QLabel()
-        self.banner_message.setStyleSheet("font-size: 14px; font-weight: 500;")
+        self.banner_message.setStyleSheet("font-size: 14px; font-weight: 500;background-color: transparent;")
         layout.addWidget(self.banner_message, 1)
 
         # 操作按钮区域
@@ -1188,9 +1201,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "未找到输出目录")
 
     def _reset_after_processing(self):
-        """[FIX] 处理完成后重置界面状态"""
+        """
+        [FIX] 处理完成后重置界面状态
+
+        [问题4] 保留必要的字段枚举信息，避免清除缓存后下拉框乱码：
+        - _sheet_selections: 用户选择的 Sheet 名称
+        - _dedup_field: 去重字段名称
+        - dict_loader: 字典加载器（避免下拉框枚举丢失）
+        """
         self.btn_start.setEnabled(True)
         self._log_message("INFO", "处理完成，可进行下一批次处理")
+
+        # [问题4] 保留必要的字段枚举信息
+        retained_info = {
+            "_sheet_selections": getattr(self, '_sheet_selections', {}),
+            "_dedup_field": getattr(self, '_dedup_field', None),
+            "_dict_loader": getattr(self, '_last_context', None) and getattr(self._last_context, 'dict_loader', None),
+        }
+        logger.debug(f"[问题4] 保留字段枚举信息: sheet_selections={len(retained_info['_sheet_selections'])}, dedup_field={retained_info['_dedup_field']}")
 
         # [MEMORY] 清理 _last_context 中的大型数据，保留 summary 供查看详情使用
         if hasattr(self, '_last_context') and self._last_context:
@@ -1198,9 +1226,8 @@ class MainWindow(QMainWindow):
             # 清理 DataFrame 引用，释放内存
             ctx.dataframes = {"yixian": None, "sanfang": None, "hw": None}
             ctx.error_records = {"yixian": None, "sanfang": None, "hw": None}
-            # 清理数据字典加载器
-            ctx.dict_loader = None
-            logger.debug("[Memory] 已清理 _last_context 中的大型数据对象")
+            # [问题4] 不再清理 dict_loader，保留字典信息避免下拉框乱码
+            logger.debug("[Memory] 已清理 _last_context 中的大型数据对象（保留 dict_loader）")
 
         # [MEMORY] 清理 worker 引用
         if self.worker:
@@ -1232,26 +1259,7 @@ class MainWindow(QMainWindow):
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setFixedWidth(200)
         self.btn_start.setMinimumHeight(44)
-        self.btn_start.setStyleSheet("""
-            QPushButton {
-                background-color: #2563EB;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #3B82F6;
-            }
-            QPushButton:pressed {
-                background-color: #1D4ED8;
-            }
-            QPushButton:disabled {
-                background-color: #E5E7EB;
-                color: #9CA3AF;
-            }
-        """)
+        self.btn_start.setStyleSheet(BUTTON_STYLE_PRIMARY_START)
         self.btn_start.clicked.connect(self._on_start_processing)
         layout.addWidget(self.btn_start)
 
@@ -1435,7 +1443,9 @@ class MainWindow(QMainWindow):
     def _update_dict_version_label(self, dict_file_path: str):
         """
         [ISSUE-13] 显示字典版本信息
-        读取字典文件MD5并显示在界面
+        [问题5] 显示字典文件的实际修改时间
+
+        显示格式：字典 v{hash} (更新时间: YYYY-MM-DD HH:MM)
         """
         import hashlib
         import os
@@ -1446,9 +1456,15 @@ class MainWindow(QMainWindow):
                     md5_hash.update(chunk)
             short_hash = md5_hash.hexdigest()[:8]
             filename = os.path.basename(dict_file_path)
-            # 原型格式：字典 v{hash} (日期)
-            self._update_window_title(f"字典 v{short_hash} ({datetime.now().strftime('%Y-%m-%d')})")
-            logger.info(f"字典版本: {filename} (MD5: {short_hash})")
+
+            # [问题5] 获取字典文件的实际修改时间
+            file_mtime = os.path.getmtime(dict_file_path)
+            file_mtime_dt = datetime.fromtimestamp(file_mtime)
+            file_mtime_str = file_mtime_dt.strftime('%Y-%m-%d %H:%M')
+
+            # 显示格式：字典 v{hash} (更新时间: YYYY-MM-DD HH:MM)
+            self._update_window_title(f"字典 v{short_hash} (更新时间: {file_mtime_str})")
+            logger.info(f"字典版本: {filename} (MD5: {short_hash}, 文件更新时间: {file_mtime_str})")
         except (OSError, PermissionError, ValueError) as e:
             self._update_window_title(f"字典 版本检测失败")
             logger.warning(f"字典版本检测失败: {e}")
@@ -1878,7 +1894,10 @@ class MainWindow(QMainWindow):
 
         # Step 3: 更新状态（仅在格式和MD5校验均通过时）
         self._last_dict_md5 = md5_short
-        self._update_window_title(f"字典 v{md5_short} ({datetime.now().strftime('%Y-%m-%d')})")
+        # [问题5] 显示字典文件的实际修改时间
+        file_mtime = os.path.getmtime(dict_file_path)
+        file_mtime_str = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M')
+        self._update_window_title(f"字典 v{md5_short} (更新时间: {file_mtime_str})")
 
     def _load_dict_default_config(self, from_init: bool = False):
         """
@@ -1917,18 +1936,17 @@ class MainWindow(QMainWindow):
                     label.style().unpolish(label)
                     label.style().polish(label)
 
-            # 显示导入时间
-            time_info = ""
-            if last_dict_time:
-                try:
-                    dt = datetime.fromisoformat(last_dict_time)
-                    time_info = f" | 导入: {dt.strftime('%Y-%m-%d %H:%M')}"
-                except (ValueError, TypeError):  # [FIX] 限定具体异常类型
-                    time_info = f" | 导入: {last_dict_time}"
+            # [问题5] 显示字典文件的实际修改时间
+            try:
+                file_mtime = os.path.getmtime(last_dict_path)
+                file_mtime_str = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M')
+                time_info = f" | 更新时间: {file_mtime_str}"
+                self._update_window_title(f"字典 v{last_dict_md5 or '?'} (更新时间: {file_mtime_str})")
+            except (OSError, ValueError):
+                time_info = ""
+                self._update_window_title(f"字典 v{last_dict_md5 or '?'} (默认值)")
 
             display_md5 = f"v{last_dict_md5 or '?'}" if last_dict_md5 else ""
-            self._update_window_title(f"字典 {display_md5} (默认值)")
-
             if from_init:
                 self._log_message("INFO", f"已自动加载字典：{os.path.basename(last_dict_path)} {display_md5}{time_info}")
                 logger.info(f"自动加载字典: {last_dict_path}")
@@ -2109,6 +2127,7 @@ class MainWindow(QMainWindow):
         sheet_name : str, optional
             指定要读取的 sheet 名称。如果为 None，则读取第一个 sheet。
         """
+        import html
         import re, zipfile
         import time as time_module
 
@@ -2259,6 +2278,13 @@ class MainWindow(QMainWindow):
                 self._animate_file_info_success(file_type)
                 self._log_message("INFO", f"已选择 [{file_type}]: {basename} ({file_info['rows']:,} 行){sheet_info}")
                 logger.debug(f"[_update_file_info_safe] UI更新完成")
+
+                # [缓存优化] 一线文件加载成功后更新列名缓存
+                if file_type == "yixian":
+                    columns = self._get_excel_columns(self.file_paths.get("yixian"), selected_sheet)
+                    if columns:
+                        self._yixian_columns = columns
+                        logger.debug(f"[_update_file_info_safe] 已更新 _yixian_columns 缓存，共 {len(columns)} 列")
             else:
                 # 数据无效（0行0列），显示警告
                 logger.warning(f"[_update_file_info_safe] 文件数据无效，跳过信息展示")
@@ -2671,9 +2697,9 @@ class MainWindow(QMainWindow):
             if last_spec_time:
                 try:
                     dt = datetime.fromisoformat(last_spec_time)
-                    time_info = f" | 导入: {dt.strftime('%Y-%m-%d %H:%M')}"
+                    time_info = f" | 更新时间: {dt.strftime('%Y-%m-%d %H:%M')}"
                 except (ValueError, TypeError):  # [FIX] 限定具体异常类型
-                    time_info = f" | 导入: {last_spec_time}"
+                    time_info = f" | 更新时间: {last_spec_time}"
             
             self.file_labels["spec"].setText(f"✅ 默认值{time_info}")
             # [20260420-老谈] 保存显示用的文件名，以便后续保存配置时使用

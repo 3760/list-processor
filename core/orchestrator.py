@@ -76,6 +76,14 @@ class ProcessOrchestrator:
         completed_weight = 0
 
         try:
+            # [问题1修复] 在开始执行前，先将未包含在模块列表中的模块标记为跳过
+            # 这样 progress_panel 可以正确计算 active_weight，使进度条能正确显示100%
+            all_modules = {"F1", "F2", "F3", "F4", "F5", "F6", "F7"}
+            executed_modules = {m.get_module_name() for m in self.modules}
+            for module_name in all_modules - executed_modules:
+                logger.info(f"模块 {module_name} 未勾选，标记为跳过")
+                self._report_status(module_name, "skipped")
+
             for module in self.modules:
                 module_name = module.get_module_name()
                 logger.info(f"========== 开始模块 {module_name} ==========")

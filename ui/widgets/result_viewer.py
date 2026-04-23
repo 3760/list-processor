@@ -29,6 +29,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ui.styles.button_styles import BUTTON_STYLE_SECONDARY
+
 from core.context import ProcessContext
 
 
@@ -68,38 +70,21 @@ class ResultViewerDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        btn_style = """
-            QPushButton {
-                background-color: #FFFFFF;
-                color: #374151;
-                border: 1px solid #D1D5DB;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 16px;
-            }
-            QPushButton:hover {
-                background-color: #F9FAFB;
-                border-color: #9CA3AF;
-            }
-        """
-
         # 打开输出目录按钮
         self.btn_open_output = QPushButton("📂 打开输出目录")
-        self.btn_open_output.setStyleSheet(btn_style)
+        self.btn_open_output.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_open_output.clicked.connect(self._open_output_dir)
         button_layout.addWidget(self.btn_open_output)
 
         # 开始新处理按钮
         self.btn_new_process = QPushButton("🔄 开始新处理")
-        self.btn_new_process.setStyleSheet(btn_style)
+        self.btn_new_process.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_new_process.clicked.connect(self._start_new_process)
         button_layout.addWidget(self.btn_new_process)
 
         # 关闭按钮
         self.close_btn = QPushButton("关闭")
-        self.close_btn.setStyleSheet(btn_style)
+        self.close_btn.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.close_btn.clicked.connect(self.accept)
         button_layout.addWidget(self.close_btn)
 

@@ -378,6 +378,12 @@ class ProgressPanel(QWidget):
         """
         根据各模块进度计算总体进度（带动画效果，规范2.2）
 
+        进度计算逻辑：
+        - 只统计勾选模块的进度
+        - total = Σ(勾选模块的实际进度)
+        - active_weight = Σ(勾选模块的权重)
+        - 百分比 = (total / active_weight) * 100
+
         动画参数：
         - 填充速度：300ms
         - 缓动函数：ease-out
@@ -414,7 +420,7 @@ class ProgressPanel(QWidget):
                     total += 0.5 * weight
             # 未开始/跳过/失败：不贡献
 
-        # 按活跃权重比例计算最终百分比
+        # 计算百分比：已完成进度 / 活跃权重 * 100
         target_value = min(int((total / active_weight) * 100), 100) if active_weight > 0 else 0
         current_value = self.progress_bar.value()
         # 创建平滑动画（300ms ease-out）

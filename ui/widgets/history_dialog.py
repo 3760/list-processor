@@ -37,6 +37,7 @@ from PyQt5.QtWidgets import (
 
 from db.dao.processing_history import ProcessingHistoryDAO
 from infra.log_manager import get_logger
+from ui.styles.button_styles import BUTTON_STYLE_SECONDARY, BUTTON_STYLE_DANGER
 
 logger = get_logger(__name__)
 
@@ -170,39 +171,17 @@ class HistoryDialog(QDialog):
 
         # 按钮区域
         button_layout = QHBoxLayout()
-        
-        btn_style = """
-            QPushButton {
-                background-color: #FFFFFF;
-                color: #374151;
-                border: 1px solid #D1D5DB;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 16px;
-            }
-            QPushButton:hover {
-                background-color: #F9FAFB;
-                border-color: #9CA3AF;
-            }
-            QPushButton:disabled {
-                background-color: #F3F4F6;
-                color: #9CA3AF;
-                border-color: #E5E7EB;
-            }
-        """
 
         # 查看详情按钮
         self.btn_detail = QPushButton("查看详情")
-        self.btn_detail.setStyleSheet(btn_style)
+        self.btn_detail.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_detail.setEnabled(False)
         self.btn_detail.clicked.connect(self._on_view_detail)
         button_layout.addWidget(self.btn_detail)
 
         # [20260420-老谈] 打开输出目录按钮（修正按钮文字）
         self.btn_open_folder = QPushButton("打开输出目录")
-        self.btn_open_folder.setStyleSheet(btn_style)
+        self.btn_open_folder.setStyleSheet(BUTTON_STYLE_SECONDARY)
         self.btn_open_folder.setEnabled(False)
         self.btn_open_folder.clicked.connect(self._on_open_folder)
         button_layout.addWidget(self.btn_open_folder)
@@ -211,34 +190,14 @@ class HistoryDialog(QDialog):
 
         # 删除按钮（危险按钮样式）
         self.btn_delete = QPushButton("删除记录")
+        self.btn_delete.setStyleSheet(BUTTON_STYLE_DANGER)
         self.btn_delete.setEnabled(False)
         self.btn_delete.clicked.connect(self._on_delete)
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                color: #991B1B;
-                border: 1px solid #FECACA;
-                background-color: #FFFFFF;
-                border-radius: 6px;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 36px;
-                padding: 0 16px;
-            }
-            QPushButton:hover {
-                background-color: #FEF2F2;
-                border-color: #FCA5A5;
-            }
-            QPushButton:disabled {
-                background-color: #F3F4F6;
-                color: #9CA3AF;
-                border-color: #E5E7EB;
-            }
-        """)  # P2-08: 对齐设计规范错误色 #991B1B
         button_layout.addWidget(self.btn_delete)
 
-        # 关闭按钮（使用自定义样式）
+        # 关闭按钮
         btn_close = QPushButton("关闭")
-        btn_close.setStyleSheet(btn_style)
+        btn_close.setStyleSheet(BUTTON_STYLE_SECONDARY)
         btn_close.clicked.connect(self.accept)
         button_layout.addWidget(btn_close)
 
