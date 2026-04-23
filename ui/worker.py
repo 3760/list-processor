@@ -101,7 +101,7 @@ class ProcessingWorker(QThread):
 
             self.status_changed.emit("处理完成")
             self._emit_log("INFO", f"处理完成 run_id={result_context.run_id}")
-            self.progress_updated.emit("完成", 100)
+            self.progress_updated.emit("完成", 100, None)
             self.finished.emit(result_context, True, "")
 
         except CriticalError as e:

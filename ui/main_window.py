@@ -1192,6 +1192,24 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(True)
         self._log_message("INFO", "处理完成，可进行下一批次处理")
 
+        # [MEMORY] 清理 _last_context 中的大型数据，保留 summary 供查看详情使用
+        if hasattr(self, '_last_context') and self._last_context:
+            ctx = self._last_context
+            # 清理 DataFrame 引用，释放内存
+            ctx.dataframes = {"yixian": None, "sanfang": None, "hw": None}
+            ctx.error_records = {"yixian": None, "sanfang": None, "hw": None}
+            # 清理数据字典加载器
+            ctx.dict_loader = None
+            logger.debug("[Memory] 已清理 _last_context 中的大型数据对象")
+
+        # [MEMORY] 清理 worker 引用
+        if self.worker:
+            if hasattr(self.worker, 'context'):
+                self.worker.context = None
+            if hasattr(self.worker, 'orchestrator'):
+                self.worker.orchestrator = None
+            logger.debug("[Memory] 已清理 worker 中的引用")
+
     def _create_action_bar(self) -> QWidget:
         """创建底部操作区"""
         container = QWidget()
