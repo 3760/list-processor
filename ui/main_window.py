@@ -1069,9 +1069,9 @@ class MainWindow(QMainWindow):
         }
         icon, bg_color, text_color = icon_map.get(status, icon_map["success"])
 
-        self.banner_icon.setText(f'<span style="font-size: 18px;">{icon}</span>')
+        self.banner_icon.setText(f'<span style="font-size: 18px; background-color: transparent;">{icon}</span>')
         self.banner_message.setText(message)
-        self.banner_message.setStyleSheet(f"font-size: 14px; font-weight: 500; color: {text_color};")
+        self.banner_message.setStyleSheet(f"font-size: 14px; font-weight: 500; color: {text_color}; background-color: transparent;")
 
         # 根据状态显示不同按钮
         if status == "warning":

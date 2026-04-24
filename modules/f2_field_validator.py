@@ -57,13 +57,18 @@ class FieldValidatorModule(BaseModule):
         # ── 检查1：field_spec 是否已加载 ────────────────────────────
         if context.field_spec is None:
             logger.warning("[F2] 前置检查未通过：field_spec 未加载")
-            return False, "请先执行字段规范导入"
+            return False, "[F2] 跳过: 请先执行字段规范导入"
 
         # ── 检查2：一线名单是否存在 ────────────────────────────────
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None:
             logger.warning("[F2] 前置检查未通过：一线名单 DataFrame 不存在")
-            return False, "请先执行 F1 文件加载"
+            return False, "[F2] 跳过: 请先执行 F1 文件加载"
+
+        # ── 检查3：一线名单是否为空 ────────────────────────────────
+        if df_yixian.is_empty():
+            logger.warning("[F2] 前置检查未通过：一线名单为空")
+            return False, "[F2] 跳过: 一线名单为空"
 
         logger.info(f"[F2] 前置检查通过：一线名单 {len(df_yixian)} 行")
         return True, ""
@@ -95,15 +100,6 @@ class FieldValidatorModule(BaseModule):
         logger.info("[F2] 开始字段合规性校验")
 
         df_yixian = context.get_dataframe("yixian")
-        if df_yixian is None or df_yixian.is_empty():
-            logger.warning("[F2] 一线名单为空，跳过校验")
-            context.record_module_result(
-                module="F2",
-                success_count=0,
-                fail_count=0,
-                message="一线名单为空，跳过校验",
-            )
-            return context
 
         # [DEBUG] 输出数据概览
         total_rows = len(df_yixian)
@@ -209,41 +205,67 @@ class FieldValidatorModule(BaseModule):
             logger.info("[F2] 校验完成：所有数据均合规")
 
         # ── 记录模块结果（F2-06）─────────────────────────────────
+        if error_row_count == 0:
+            msg = f"[F2] 成功: {total_rows} 行数据，全部合规"
+        else:
+            msg = f"[F2] 失败: {total_rows} 行数据，{error_row_count} 项不合规"
         context.record_module_result(
             module="F2",
             success_count=total_rows - error_row_count,
             fail_count=error_row_count,
-            message=(
-                f"校验完成：{total_rows} 行数据，"
-                f"{error_row_count} 行不合规（{total_errors} 个单元格错误）"
-            ),
+            message=msg,
         )
 
-        # ── [20260420-老谈] ISSUE-01: 错误数据隔离 ──────────────────
-        # 核心策略：将检出的错误行从 DataFrame 中物理移除，
-        # 防止错误数据流入下游模块（F3/F4/F5/F6/F7）。
-        # 使用 error_row_ids 集合（1-based 行号）进行过滤。
+        # ── [20260424-老谈] 重构：错误数据逻辑标记（替代物理删除）────────
+        # 核心策略：不物理删除错误行，改为添加标记列
+        # - 合规检查_状态：通过 / 不通过
+        # - 合规检查_错误数：该行触发的错误数量
+        # - 合规检查_错误类型：逗号分隔的错误类型代码
+        #
+        # 下游模块（F3/F5/F6）根据标记列过滤处理
 
         # [FIX PRD F7-07] 保存原始数据量供处理摘要显示
         if not hasattr(context, 'original_row_counts'):
             context.original_row_counts = {}
         context.original_row_counts["yixian"] = total_rows
 
-        if error_row_ids:
-            # 转为 0-based 索引集合（Polars 行索引从 0 开始）
-            zero_based_indices = {rid - 1 for rid in error_row_ids}
-            # 构建保留掩码：不在错误行号集合中的行保留
-            keep_mask = [
-                idx not in zero_based_indices
-                for idx in range(len(df_yixian))
-            ]
-            filtered_df = df_yixian.filter(pl.Series(keep_mask))
-            context.set_dataframe("yixian", filtered_df)
-            logger.info(
-                f"[F2] 数据隔离：原始 {total_rows} 行 → "
-                f"过滤后 {len(filtered_df)} 行（移除 {error_row_count} 行错误数据）"
-            )
-        # ── 错误数据隔离结束 ───────────────────────────────────────
+        # 统计每行的错误数量和错误类型
+        row_error_count: Dict[int, int] = {}      # {行号: 错误数}
+        row_error_types: Dict[int, List[str]] = {}  # {行号: [错误类型列表]}
+
+        for err in all_errors:
+            row_num = err.get("行号", 0)
+            if row_num > 0:
+                row_error_count[row_num] = row_error_count.get(row_num, 0) + 1
+                if row_num not in row_error_types:
+                    row_error_types[row_num] = []
+                if err.get("问题类型"):
+                    row_error_types[row_num].append(err["问题类型"])
+
+        # 添加标记列到 DataFrame
+        df_yixian = df_yixian.with_columns([
+            pl.col("_row_num").map_elements(
+                lambda x: "通过" if row_error_count.get(x, 0) == 0 else "不通过",
+                return_dtype=pl.Utf8
+            ).alias("合规检查_状态"),
+            pl.col("_row_num").map_elements(
+                lambda x: row_error_count.get(x, 0),
+                return_dtype=pl.Int32
+            ).alias("合规检查_错误数"),
+            pl.col("_row_num").map_elements(
+                lambda x: ",".join(row_error_types.get(x, [])) if x in row_error_types else "",
+                return_dtype=pl.Utf8
+            ).alias("合规检查_错误类型"),
+        ])
+        context.set_dataframe("yixian", df_yixian)
+
+        # 记录处理统计
+        valid_count = total_rows - error_row_count
+        logger.info(
+            f"[F2] 逻辑标记完成：{total_rows} 行数据，"
+            f"{valid_count} 行通过，{error_row_count} 行不通过"
+        )
+        # ── 逻辑标记结束 ───────────────────────────────────────────
 
         return context
 

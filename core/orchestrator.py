@@ -88,24 +88,23 @@ class ProcessOrchestrator:
                 module_name = module.get_module_name()
                 logger.info(f"========== 开始模块 {module_name} ==========")
 
-                # 通知模块开始执行
-                self._report_status(module_name, "running")
-
                 # 1. 前置校验
                 valid, err_msg = module.validate_input(context)
                 if not valid:
-                    logger.warning(f"模块 {module_name} 前置校验未通过: {err_msg}")
+                    logger.warning(f"模块 {module_name}  {err_msg}===前置校验未通过")
                     context.record_module_result(
                         module_name,
                         success_count=0,
                         fail_count=0,
                         skip_count=0,
-                        message=f"前置校验未通过: {err_msg}",
+                        message=f"{err_msg}===前置校验未通过",
                     )
                     # 通知模块跳过
                     self._report_status(module_name, "skipped")
-                    self._report_progress(module_name, completed_weight)
                     continue
+
+                # 通知模块开始执行
+                self._report_status(module_name, "running")
 
                 # 2. 计时执行
                 start_time = time.time()

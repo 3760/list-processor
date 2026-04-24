@@ -98,6 +98,9 @@ def load_files(
     total_files = len(file_list)
     F1_WEIGHT = 15  # F1 总权重
 
+    # 收集各类型加载结果
+    load_results = []
+
     for i, (list_type, file_path) in enumerate(file_list):
         # 计算基于F1总权重的进度
         base_percent = int(i / total_files * F1_WEIGHT)
@@ -108,12 +111,7 @@ def load_files(
             pre_selected_sheet = sheet_selections.get(list_type)
             df = _load_single_file(file_path, list_type, pre_selected_sheet)
             ctx.set_dataframe(list_type, df)
-            ctx.record_module_result(
-                module="F1",
-                success_count=len(df),
-                fail_count=0,
-                message=f"[{list_type}] 加载成功，{len(df)} 行",
-            )
+            load_results.append((list_type, len(df), None))
             logger.info(f"  [{list_type}] 加载成功，{len(df)} 行")
 
             # 文件加载完成，更新进度
@@ -122,13 +120,19 @@ def load_files(
 
         except (DataQualityError, OSError, PermissionError) as e:
             logger.error(f"  [{list_type}] 加载失败: {e}")
-            ctx.record_module_result(
-                module="F1",
-                success_count=0,
-                fail_count=1,
-                message=f"[{list_type}] 加载失败: {e}",
-            )
+            load_results.append((list_type, 0, str(e)))
             raise DataQualityError(f"[{list_type}] 文件加载失败: {e}") from e
+
+    # 生成合并的加载结果消息
+    total_rows = sum(r[1] for r in load_results if r[2] is None)
+    detail_parts = [f"{r[0]} {r[1]} 行" for r in load_results if r[2] is None]
+    detail_msg = "，".join(detail_parts)
+    ctx.record_module_result(
+        module="F1",
+        success_count=total_rows,
+        fail_count=sum(1 for r in load_results if r[2] is not None),
+        message=f"[F1] 成功: {detail_msg}" if detail_parts else f"[F1] 失败: {load_results[0][2]}",
+    )
 
     # 记录去重字段（供 F3/F6 使用）
     if dedup_field:
@@ -215,9 +219,9 @@ class FileLoaderModule(BaseModule):
         """校验：至少有一份名单文件路径"""
         yixian = context.get_input_file("yixian")
         if not yixian:
-            return False, "请选择一线人员名单文件"
+            return False, "[F1] 跳过: 请选择一线人员名单文件"
         if not Path(yixian).exists():
-            return False, f"一线人员名单文件不存在: {yixian}"
+            return False, f"[F1] 跳过: 一线人员名单文件不存在: {yixian}"
         return True, ""
 
     def execute(self, context: ProcessContext) -> ProcessContext:

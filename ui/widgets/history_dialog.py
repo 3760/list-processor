@@ -293,46 +293,15 @@ class HistoryDialog(QDialog):
         self.btn_open_folder.setEnabled(True)
 
     def _on_view_detail(self):
-        """[20260420-老谈] 查看详情 - 包含字典和字段规范信息"""
+        """查看详情 - 使用统一的 ResultViewerDialog 显示"""
         if not self.selected_record:
             return
 
-        # 显示详情对话框
-        from PyQt5.QtWidgets import QMessageBox
+        # 使用统一的 ResultViewerDialog 显示历史详情
+        from ui.widgets.result_viewer import ResultViewerDialog
 
-        summary = self.selected_record.get("summary", {})
-        input_files = self.selected_record.get("input_files", {})
-        module_results = summary.get("module_results", {})
-
-        # [20260420-老谈] 显示字典和字段规范文件名（如果有）
-        dict_file = input_files.get('dict')
-        spec_file = input_files.get('spec')
-        dict_name = os.path.basename(dict_file) if dict_file else '-'
-        spec_name = os.path.basename(spec_file) if spec_file else '-'
-
-        # [20260420-老谈] 处理状态使用图标+中文
-        status = self.selected_record.get('status', '-')
-        status_display = STATUS_DISPLAY.get(status, status)
-
-        detail_text = f"""处理时间: {self.selected_record.get('start_time', '-')}
-
-名单文件:
-|- 一线名单: {input_files.get('yixian', '-')}
-|- 三方名单: {input_files.get('sanfang', '-')}
-|- HW名单: {input_files.get('hw', '-')}
-
-配置文件:
-|- 数据字典: {dict_name}
-|- 字段规范: {spec_name}
-
-处理状态: {status_display}
-
-模块执行结果:"""
-
-        for module, result in module_results.items():
-            detail_text += f"\n{module}: 成功={result.get('success', 0)}, 失败={result.get('fail', 0)}"
-
-        QMessageBox.information(self, "处理详情", detail_text)
+        dialog = ResultViewerDialog(parent=self, history_record=self.selected_record)
+        dialog.exec_()
 
     def _on_open_folder(self):
         """[20260420-老谈] 打开输出目录"""

@@ -58,23 +58,23 @@ class DictEncoderModule(BaseModule):
         # ── 检查1：field_spec 是否已加载 ────────────────────────────
         if context.field_spec is None:
             logger.warning("[F4] 前置检查未通过：field_spec 未加载")
-            return False, "请先执行字段规范导入"
+            return False, "[F4] 跳过: 请先执行字段规范导入"
 
         # ── 检查2：dict_loader 是否已加载 ──────────────────────────
         if context.dict_loader is None:
             logger.warning("[F4] 前置检查未通过：dict_loader 未初始化")
-            return False, "请先执行 F1 文件加载（数据字典加载失败）"
+            return False, "[F4] 跳过: 数据字典加载失败"
 
         # ── 检查3：一线名单是否存在 ────────────────────────────────
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None:
             logger.warning("[F4] 前置检查未通过：一线名单 DataFrame 不存在")
-            return False, "请先执行 F1 文件加载"
+            return False, "[F4] 跳过: 请先执行 F1 文件加载"
 
         # ── 检查4：一线名单是否为空 ────────────────────────────────
         if df_yixian.is_empty():
             logger.warning("[F4] 前置检查未通过：一线名单为空（0行）")
-            return False, "一线名单为空，无法执行上码"
+            return False, "[F4] 跳过: 一线名单为空"
 
         logger.info(f"[F4] 前置检查通过：一线名单 {len(df_yixian)} 行")
         return True, ""
@@ -107,15 +107,6 @@ class DictEncoderModule(BaseModule):
         logger.info("[F4] 开始数据字典上码")
 
         df_yixian = context.get_dataframe("yixian")
-        if df_yixian is None or df_yixian.is_empty():
-            logger.warning("[F4] 一线名单为空，跳过上码")
-            context.record_module_result(
-                module="F4",
-                success_count=0,
-                fail_count=0,
-                message="一线名单为空，跳过上码",
-            )
-            return context
 
         # 获取字段规范
         field_spec = context.field_spec
@@ -140,7 +131,7 @@ class DictEncoderModule(BaseModule):
                 module="F4",
                 success_count=len(df_yixian),
                 fail_count=0,
-                message="未找到字典类型字段，跳过上码",
+                message="[F4] 跳过: 未找到字典类型字段",
             )
             return context
 
@@ -240,9 +231,8 @@ class DictEncoderModule(BaseModule):
             success_count=total_matched,
             fail_count=total_unmatched,
             message=(
-                f"上码完成：{len(dict_type_fields)} 个字典类型字段，"
-                f"共 {total_matched + total_unmatched} 行，"
-                f"匹配 {total_matched}，未匹配 {total_unmatched}"
+                f"[F4] 成功: {len(dict_type_fields)} 个字段，"
+                f"{total_matched} 项已上码，{total_unmatched} 项未匹配"
             ),
         )
 

@@ -14,7 +14,7 @@ F7: 结果输出模块
 - 写入速度比 openpyxl 快 2-10 倍
 
 PRD NQ-09 结果提示规则：
-  ✅ 无问题 → "处理完成，结果可直接上传 CEM 系统"（绿色）
+  ✅ 无问题 → "处理完成，结果可直接编辑后，上传 CEM 系统"（绿色）
   ⚠️ 有警告 → "处理完成，但发现 X 条问题，建议修复后再上传 CEM 系统"（黄色）
   ❌ 失败   → "处理失败：{错误信息}"（红色）
 """
@@ -126,10 +126,16 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
     }
     
     output_paths: Dict[str, str] = {}
-    
+
     for source_key, config in source_config.items():
         df = ctx.get_dataframe(source_key)
-        if df is None or len(df) == 0:
+        error_df = ctx.error_records.get(source_key)
+
+        # [20260424-老谈] 修复：有错误数据时，即使 df 为空也生成文件
+        has_main_data = df is not None and len(df) > 0
+        has_error_data = error_df is not None and len(error_df) > 0
+
+        if not has_main_data and not has_error_data:
             logger.info(f"[F7] {config['label']} 无数据，跳过生成")
             continue
         
@@ -171,12 +177,15 @@ def _write_single_source_sheets(
     [20260420-老谈] ISSUE-03: 从原来的统一多 Sheet 改为按名单拆分
     [PERF] 20260422: 使用 xlsxwriter 替代 openpyxl
     [方案C] 支持 progress_callback 用于子任务进度报告
+    [20260424-老谈] 修复：当 df 为空但有错误数据时，使用错误记录生成"原始数据"Sheet
     """
     df = ctx.get_dataframe(source_key)
+    error_df = ctx.error_records.get(source_key)
     row_count = len(df) if df is not None else 0
+    error_count = len(error_df) if error_df is not None else 0
 
     # [LOG] 记录开始写入该名单的所有 Sheet
-    logger.info(f"[F7] ▶ 开始写入 {label} 的各 Sheet，数据行数：{row_count}")
+    logger.info(f"[F7] ▶ 开始写入 {label} 的各 Sheet，数据行数：{row_count}，错误行数：{error_count}")
 
     # 1. 处理摘要 Sheet
     _write_summary_sheet_for_source(wb, ctx, source_key, label, df)
@@ -184,9 +193,13 @@ def _write_single_source_sheets(
     if progress_callback:
         progress_callback("F7", 20)  # [方案C] 子任务进度
 
-    # 2. 数据 Sheet（仅合规通过的数据）[FIX PRD 附录B] 统一使用"原始数据"
-    _write_data_sheet(wb, "原始数据", df)
-    logger.debug(f"[F7]   ✓ 原始数据 Sheet 完成，{row_count} 行")
+    # 2. 原始数据 Sheet
+    # [20260424-老谈] 修复：df 为空但有错误时，不生成"原始数据"Sheet，只保留"合规性检查结果"
+    if df is not None and len(df) > 0:
+        _write_data_sheet(wb, "原始数据", df)
+        logger.debug(f"[F7]   ✓ 原始数据 Sheet 完成，{row_count} 行")
+    else:
+        logger.debug(f"[F7]   - 原始数据 Sheet 无数据（主数据为空），跳过")
     if progress_callback:
         progress_callback("F7", 60)  # [方案C] 子任务进度
 
@@ -654,6 +667,45 @@ def _write_data_sheet(
     logger.info(f"[F7]   ✓ {sheet_name} 写入完成，{row_count} 行 × {total_cols} 列")
 
 
+def _write_error_as_main_sheet(
+    wb, error_df: pl.DataFrame
+) -> None:
+    """
+    [20260424-老谈] 新增：当主数据为空但有错误记录时，使用错误记录生成"原始数据"Sheet。
+
+    将 error_records 转换为可读的表格格式：
+    - 行号、字段名、原始值、问题类型、说明
+
+    Parameters
+    ----------
+    wb : xlsxwriter.Workbook
+        Excel 工作簿对象
+    error_df : pl.DataFrame
+        错误记录 DataFrame（来自 ctx.error_records）
+    """
+    ws = wb.add_worksheet("原始数据")
+
+    # 定义输出列
+    output_columns = ["行号", "字段名", "原始值", "问题类型", "说明"]
+    error_count = len(error_df)
+
+    logger.info(f"[F7]   → 开始写入「原始数据」（基于错误记录），{error_count} 行")
+
+    # 写入表头（第0行）
+    for col_idx, col_name in enumerate(output_columns):
+        ws.write(0, col_idx, col_name)
+
+    # 逐行写入错误记录
+    for row_idx, row_data in enumerate(error_df.iter_rows(named=True), start=1):
+        ws.write(row_idx, 0, row_data.get("行号", ""))
+        ws.write(row_idx, 1, row_data.get("字段名", ""))
+        ws.write(row_idx, 2, row_data.get("原始值", ""))
+        ws.write(row_idx, 3, row_data.get("问题类型", ""))
+        ws.write(row_idx, 4, row_data.get("说明", ""))
+
+    logger.info(f"[F7]   ✓ 「原始数据」（基于错误记录）写入完成，{error_count} 行")
+
+
 def _write_error_records_sheet(wb, ctx: ProcessContext) -> None:
     """
     旧版兼容接口：写入合并的合规性检查结果。
@@ -715,20 +767,19 @@ def build_result_message(ctx: ProcessContext) -> tuple[str, str]:
             if isinstance(mod_result, dict) and "message" in mod_result:
                 last_error = mod_result["message"]
                 break
-        message = f"处理失败：{last_error}"
+        message = f"[F7] 失败: {last_error}"
         level = "error"
 
     elif total_failed > 0:
         # ⚠️ 有警告
         message = (
-            f"处理完成，但发现 {total_failed} 条问题，"
-            "建议修复后再上传 CEM 系统。[查看详情]"
+            f"[F7] 成功: 发现 {total_failed} 条问题，建议修复后再上传 CEM 系统"
         )
         level = "warning"
 
     else:
         # ✅ 无问题
-        message = "处理完成，结果可直接上传 CEM 系统"
+        message = "[F7] 成功: 处理完成，结果可直接编辑后，上传 CEM 系统"
         level = "success"
 
     logger.info(f"[F7] 结果提示（{level}）：{message}")
@@ -753,7 +804,7 @@ class OutputExporterModule(BaseModule):
             for key in ["yixian", "sanfang", "hw"]
         )
         if not has_data:
-            return False, "没有可输出的数据，请先执行文件加载"
+            return False, "[F7] 跳过: 没有可输出的数据"
         return True, ""
 
     def execute(self, context: ProcessContext) -> ProcessContext:
@@ -792,7 +843,7 @@ class OutputExporterModule(BaseModule):
             module="F7",
             success_count=len(result_paths),
             fail_count=0,
-            message=f"[F7] {message}",
+            message=f" {message}",
         )
         logger.info(f"[F7] 结果已输出至 {len(result_paths)} 个文件")
         return context

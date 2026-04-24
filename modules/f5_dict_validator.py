@@ -57,26 +57,33 @@ class DictValidatorModule(BaseModule):
         # ── 检查1：dict_loader 是否已初始化 ──────────────────────
         if context.dict_loader is None:
             logger.warning("[F5] 前置检查未通过：dict_loader 未初始化")
-            return False, "请先执行 F4 字典上码（数据字典加载失败）"
+            return False, "[F5] 跳过: 数据字典加载失败"
 
         # ── 检查2：一线名单是否存在 ────────────────────────────────
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None:
             logger.warning("[F5] 前置检查未通过：一线名单 DataFrame 不存在")
-            return False, "请先执行 F1 文件加载"
+            return False, "[F5] 跳过: 请先执行 F1 文件加载"
 
-        # ── 检查3：一线名单是否为非空 ─────────────────────────────
-        if df_yixian.is_empty():
-            logger.warning("[F5] 前置检查未通过：一线名单 DataFrame 为空")
-            return False, "请先执行 F1 文件加载或检查数据"
+        # ── [20260424-老谈] 修改：检查是否有合规数据 ─────────────────
+        # 不再检查 is_empty()，改为检查"合规检查_状态=通过"的行数
+        valid_count = 0
+        if "合规检查_状态" in df_yixian.columns:
+            valid_count = df_yixian.filter(pl.col("合规检查_状态") == "通过").height
+        else:
+            valid_count = df_yixian.height
 
-        # ── 检查4：是否存在 _Code 列（F4 上码结果）─────────────
+        if valid_count == 0:
+            logger.warning("[F5] 前置检查未通过：一线名单无合规数据")
+            return False, "[F5] 跳过: 一线名单无合规数据"
+
+        # ── 检查3：是否存在 _Code 列（F4 上码结果）─────────────
         code_columns = [col for col in df_yixian.columns if col.endswith("_Code")]
         if not code_columns:
             logger.warning(f"[F5] 前置检查未通过：一线名单中未找到 _Code 列")
-            return False, "请先执行 F4 字典上码"
+            return False, "[F5] 跳过: 请先执行 F4 字典上码"
 
-        logger.info(f"[F5] 前置检查通过：发现 {len(code_columns)} 个 _Code 列")
+        logger.info(f"[F5] 前置检查通过：发现 {len(code_columns)} 个 _Code 列，合规数据 {valid_count} 行")
         return True, ""
 
     def execute(self, context: ProcessContext) -> ProcessContext:
@@ -84,10 +91,12 @@ class DictValidatorModule(BaseModule):
         执行字典值合规校验（PRD F5-01 ~ F5-04）：
 
         逻辑：
-        1. 遍历所有 _Code 列（由 F4 生成）
-        2. 识别 Code="未匹配" 的行
-        3. 收集不合规记录到 error_records
-        4. 记录模块处理结果
+        1. 只对"合规检查_状态=通过"的数据进行字典校验
+        2. 遍历所有 _Code 列（由 F4 生成）
+        3. 识别 Code="未匹配" 的行
+        4. 收集不合规记录到 error_records
+        5. 添加标记列：字典校验_状态、字典校验_错误数
+        6. 记录模块处理结果
 
         Parameters
         ----------
@@ -101,18 +110,16 @@ class DictValidatorModule(BaseModule):
         logger.info("[F5] 开始字典值校验")
 
         df_yixian = context.get_dataframe("yixian")
-        if df_yixian is None:
-            logger.warning("[F5] 一线名单为空，跳过校验")
-            context.record_module_result(
-                module="F5",
-                success_count=0,
-                fail_count=0,
-                message="一线名单为空，跳过校验",
-            )
-            return context
+
+        # ── [20260424-老谈] 过滤出合规数据，只进行字典校验 ─────────────────
+        if "合规检查_状态" in df_yixian.columns:
+            df_valid = df_yixian.filter(pl.col("合规检查_状态") == "通过")
+        else:
+            df_valid = df_yixian  # 兼容旧数据
+        logger.info(f"[F5] 合规数据 {len(df_valid)} 行，开始字典校验")
 
         # ── 查找所有 _Code 列 ────────────────────────────────────
-        code_columns = [col for col in df_yixian.columns if col.endswith("_Code")]
+        code_columns = [col for col in df_valid.columns if col.endswith("_Code")]
 
         total_invalid = 0
         all_invalid_records = []
@@ -120,14 +127,14 @@ class DictValidatorModule(BaseModule):
 
         for idx, code_col in enumerate(code_columns):
             # 识别未匹配的字段（_Code 列值 = "未匹配"）
-            invalid_df = df_yixian.filter(pl.col(code_col) == UNMATCHED_PLACEHOLDER)
+            invalid_df = df_valid.filter(pl.col(code_col) == UNMATCHED_PLACEHOLDER)
 
             if len(invalid_df) > 0:
                 # 提取原始字段名（去掉 "_Code" 后缀）
                 original_field = code_col[:-5] if code_col.endswith("_Code") else code_col
 
                 # 获取原始值列
-                original_value_col = original_field if original_field in df_yixian.columns else None
+                original_value_col = original_field if original_field in df_valid.columns else None
 
                 # [FIX #5] 安全检查：确保 original_value_col 不为 None
                 value_key = original_value_col if original_value_col else ""
@@ -154,7 +161,7 @@ class DictValidatorModule(BaseModule):
             col_progress = int((idx + 1) / total_columns * 100)
             self._report_progress(col_progress)
 
-        # ── 汇总处理结果 ──────────────────────────────────────────
+        # ── [20260424-老谈] 汇总处理结果并添加标记列 ─────────────────────
         if all_invalid_records:
             # 构建错误记录 DataFrame
             error_df = pl.DataFrame(all_invalid_records)
@@ -167,15 +174,40 @@ class DictValidatorModule(BaseModule):
         else:
             logger.info("[F5] 校验完成：所有数据均合规")
 
+        # ── [20260424-老谈] 添加字典校验标记列 ────────────────────────────
+        # 统计每行的字典校验错误数量
+        row_invalid_count: Dict[int, int] = {}
+        for record in all_invalid_records:
+            row_num = record.get("行号", 0)
+            if row_num > 0:
+                row_invalid_count[row_num] = row_invalid_count.get(row_num, 0) + 1
+
+        # 添加标记列到原始 DataFrame
+        if "字典校验_状态" not in df_yixian.columns:
+            df_yixian = df_yixian.with_columns([
+                pl.col("_row_num").map_elements(
+                    lambda x: "通过" if row_invalid_count.get(x, 0) == 0 else "不通过",
+                    return_dtype=pl.Utf8
+                ).alias("字典校验_状态"),
+                pl.col("_row_num").map_elements(
+                    lambda x: row_invalid_count.get(x, 0),
+                    return_dtype=pl.Int32
+                ).alias("字典校验_错误数"),
+            ])
+            context.set_dataframe("yixian", df_yixian)
+            logger.info(f"[F5] 添加字典校验标记列完成")
+
         # ── 记录模块结果 ──────────────────────────────────────────
+        dict_pass_count = len(df_valid) - total_invalid
+        if total_invalid == 0:
+            msg = f"[F5] 成功: {len(df_valid)} 行数据，全部合规"
+        else:
+            msg = f"[F5] 失败: {len(df_valid)} 行数据，{total_invalid} 项不合规"
         context.record_module_result(
             module="F5",
-            success_count=len(df_yixian) - total_invalid,
+            success_count=dict_pass_count,
             fail_count=total_invalid,
-            message=(
-                f"校验完成：{len(df_yixian)} 行数据，"
-                f"{total_invalid} 条不合规"
-            ),
+            message=msg,
         )
 
         return context

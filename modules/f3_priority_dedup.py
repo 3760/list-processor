@@ -49,6 +49,10 @@ class PriorityDedupModule(BaseModule):
         检查项：
         1. 一线、三方、HW 名单 DataFrame 是否存在（至少有一方存在）
         2. 去重字段（dedup_field）是否已设置
+        3. 去重字段是否存在于存在的名单中
+
+        Args:
+            context (ProcessContext): 处理上下文对象
 
         Returns
         -------
@@ -62,12 +66,25 @@ class PriorityDedupModule(BaseModule):
 
         if df_yixian is None and df_sanfang is None and df_hw is None:
             logger.warning("[F3] 前置检查未通过：三份名单均不存在")
-            return False, "请先执行 F1 文件加载"
+            return False, "[F3] 跳过: 请先执行 F1 文件加载"
+
+        # ── [20260424-老谈] 修改：检查是否有合规数据 ─────────────────
+        # 不再检查 is_empty()，改为检查"合规检查_状态=通过"的行数
+        valid_count = 0
+        if df_yixian is not None:
+            if "合规检查_状态" in df_yixian.columns:
+                valid_count = df_yixian.filter(pl.col("合规检查_状态") == "通过").height
+            else:
+                valid_count = df_yixian.height
+
+        if valid_count == 0:
+            logger.warning("[F3] 前置检查未通过：一线名单无合规数据")
+            return False, "[F3] 跳过: 一线名单无合规数据"
 
         # ── 检查2：去重字段是否已设置 ──────────────────────────
         if context.dedup_field is None:
             logger.warning("[F3] 前置检查未通过：去重字段未设置")
-            return False, "请先执行 F1 文件加载（去重字段未识别）"
+            return False, "[F3] 跳过: 去重字段未识别"
 
         # ── 检查3：去重字段是否存在于存在的名单中 ─────────────
         has_valid_df = False
@@ -80,9 +97,9 @@ class PriorityDedupModule(BaseModule):
 
         if not has_valid_df:
             logger.warning(f"[F3] 前置检查未通过：去重字段 '{context.dedup_field}' 在所有名单中均不存在")
-            return False, f"去重字段 '{context.dedup_field}' 在数据中不存在"
+            return False, f"[F3] 跳过: 去重字段 '{context.dedup_field}' 在数据中不存在"
 
-        logger.info(f"[F3] 前置检查通过：去重字段='{context.dedup_field}'")
+        logger.info(f"[F3] 前置检查通过：去重字段='{context.dedup_field}'，合规数据 {valid_count} 行")
         return True, ""
 
     def execute(self, context: ProcessContext) -> ProcessContext:
@@ -119,13 +136,24 @@ class PriorityDedupModule(BaseModule):
         hw_in_yixian = 0
         hw_in_sanfang = 0
 
-        # ── 获取一线名单的去重字段集合 ──────────────────────────
+        # ── [20260424-老谈] 获取一线名单的去重字段集合 ─────────────────
+        # 只使用"合规检查_状态=通过"的数据进行去重匹配
         df_yixian = context.get_dataframe("yixian")
         yixian_keys = set()
+        
         if df_yixian is not None and dedup_field in df_yixian.columns:
-            yixian_keys = self._extract_keys(df_yixian, dedup_field)
+            # 过滤出合规数据
+            if "合规检查_状态" in df_yixian.columns:
+                df_yixian_valid = df_yixian.filter(pl.col("合规检查_状态") == "通过")
+            else:
+                df_yixian_valid = df_yixian  # 兼容旧数据
+            
+            yixian_keys = self._extract_keys(df_yixian_valid, dedup_field)
             total_yixian = len(df_yixian)
-            logger.info(f"[F3] 一线名单：{total_yixian} 行，{len(yixian_keys)} 个唯一{dedup_field}")
+            valid_count = len(df_yixian_valid)
+            
+            # [20260424-老谈] 当一线无合规数据时，yixian_keys为空
+            logger.info(f"[F3] 一线名单：{total_yixian} 行（合规 {valid_count} 行），{len(yixian_keys)} 个唯一{dedup_field}")
 
         # ── F3-01: 三方 vs 一线标注 ───────────────────────────
         df_sanfang = context.get_dataframe("sanfang")
@@ -157,13 +185,14 @@ class PriorityDedupModule(BaseModule):
         self._report_progress(100)  # [方案C] 子任务进度
 
         # ── 记录模块结果 ──────────────────────────────────────────
+        # 三方新增 = 三方总数 - 在一线中的重复
+        sanfang_new = total_sanfang - sanfang_in_yixian if total_sanfang > 0 else 0
         context.record_module_result(
             module="F3",
-            success_count=total_sanfang + total_hw - sanfang_in_yixian - hw_in_yixian,
+            success_count=sanfang_new,
             fail_count=sanfang_in_yixian + hw_in_yixian,
             message=(
-                f"去重完成：一线 {total_yixian} 行，三方 {total_sanfang} 行（含 {sanfang_in_yixian} 重复），"
-                f"HW {total_hw} 行（含 {hw_in_yixian} 在一线、{hw_in_sanfang} 在三方）"
+                f"[F3] 成功: 三方新增 {sanfang_new} 条（重复 {sanfang_in_yixian} 条）"
             ),
         )
 
@@ -182,11 +211,14 @@ class PriorityDedupModule(BaseModule):
         keys = col.str.to_lowercase().filter(col != "").unique().to_list()
         return set(k for k in keys if k)
 
+    
     def _annotate_in_set(self, df: pl.DataFrame, dedup_field: str, key_set: set, col_name: str) -> pl.DataFrame:
         """
         判断值是否在集合中（F3-05: 标准化处理）
 
         [PERF] 使用 Polars 原生向量化操作替代 map_elements
+
+        [20260424-老谈] 修改：当 key_set 为空时（被比对名单无合规数据），标记为"跳过"
 
         Returns
         -------
@@ -194,7 +226,7 @@ class PriorityDedupModule(BaseModule):
             带标注列的新 DataFrame
         """
         if not key_set:
-            # 集合为空，全部标记为"否"
+            # [20260424-老谈] key_set为空（比对名单无合规数据），标记为"跳过"
             return df.with_columns(pl.lit(NO_VALUE).alias(col_name))
 
         # [PERF] 向量化操作：去除空格 + 转小写

@@ -60,19 +60,39 @@ class InternalDedupModule(BaseModule):
         df_yixian = context.get_dataframe("yixian")
         if df_yixian is None:
             logger.warning("[F6] 前置检查未通过：一线名单 DataFrame 不存在")
-            return False, "请先执行 F1 文件加载"
+            return False, "[F6] 跳过: 请先执行 F1 文件加载"
 
-        # ── 检查2：去重字段是否已设置 ──────────────────────────
+        # ── [20260424-老谈] 修改：检查是否有有效数据 ───────────────────
+        
+        # 检查必要的列是否存在，防止报错
+        has_compliance = "合规检查_状态" in df_yixian.columns
+        has_dict_check = "字典校验_状态" in df_yixian.columns
+        
+        # 构建过滤条件（供后续 execute 方法使用）
+        if has_compliance:
+            valid_filter = pl.col("合规检查_状态") == "通过"
+            if has_dict_check:
+                valid_filter = valid_filter & (pl.col("字典校验_状态") == "通过")
+            valid_count = df_yixian.filter(valid_filter).height
+        else:
+            valid_filter = None
+            valid_count = df_yixian.height
+
+        if valid_count == 0:
+            logger.warning("[F6] 前置检查未通过：一线名单无有效数据")
+            return False, "[F6] 跳过: 一线名单无有效数据"
+
+        # ── 检查3：去重字段是否已设置 ──────────────────────────
         if context.dedup_field is None:
             logger.warning("[F6] 前置检查未通过：去重字段未设置")
-            return False, "请先执行 F1 文件加载（去重字段未识别）"
+            return False, "[F6] 跳过: 去重字段未识别"
 
-        # ── 检查3：去重字段是否存在于 DataFrame ──────────────────
+        # ── 检查4：去重字段是否存在于 DataFrame ──────────────────
         if context.dedup_field not in df_yixian.columns:
             logger.warning(f"[F6] 前置检查未通过：去重字段 '{context.dedup_field}' 不存在")
-            return False, f"去重字段 '{context.dedup_field}' 在数据中不存在"
+            return False, f"[F6] 跳过: 去重字段 '{context.dedup_field}' 在数据中不存在"
 
-        logger.info(f"[F6] 前置检查通过：去重字段='{context.dedup_field}'")
+        logger.info(f"[F6] 前置检查通过：去重字段='{context.dedup_field}'，有效数据 {valid_count} 行")
         return True, ""
 
     def execute(self, context: ProcessContext) -> ProcessContext:
@@ -86,6 +106,10 @@ class InternalDedupModule(BaseModule):
            - 第 2 次及以后：标注"重复"
         3. 保留所有重复组（不删除数据）
         4. 空值不参与去重
+
+        [20260424-老谈] 修改：只对"合规检查_状态=通过"且"字典校验_状态=通过"的数据进行去重
+        - 有效数据：执行正常去重逻辑
+        - 无效数据：内部去重结果标记为"跳过"
 
         参数说明：
         - 去重字段由 F1-07 三级识别策略确定
@@ -103,18 +127,32 @@ class InternalDedupModule(BaseModule):
         logger.info("[F6] 开始名单内部去重")
 
         df_yixian = context.get_dataframe("yixian")
-        if df_yixian is None or df_yixian.is_empty():
-            logger.warning("[F6] 一线名单为空，跳过去重")
-            context.record_module_result(
-                module="F6",
-                success_count=0,
-                fail_count=0,
-                message="一线名单为空，跳过去重",
-            )
-            return context
-
         dedup_field = context.dedup_field
         logger.info(f"[F6] 使用去重字段：{dedup_field}")
+
+        # ── [20260424-老谈] 判断是否有标记列 ─────────────────────────────
+        has_valid_filter = "合规检查_状态" in df_yixian.columns
+        has_dict_filter = "字典校验_状态" in df_yixian.columns
+
+        if has_valid_filter or has_dict_filter:
+            # 构建有效数据过滤条件
+            valid_filter = pl.col("合规检查_状态") == "通过"
+            if has_dict_filter:
+                valid_filter = valid_filter & (pl.col("字典校验_状态") == "通过")
+
+            # 分离有效数据和无效数据
+            df_valid = df_yixian.filter(valid_filter)
+            df_invalid = df_yixian.filter(~valid_filter)
+            valid_count = len(df_valid)
+            invalid_count = len(df_invalid)
+            logger.info(f"[F6] 有效数据 {valid_count} 行（参与去重），无效数据 {invalid_count} 行（标记为跳过）")
+        else:
+            # 兼容旧数据：所有数据都参与去重
+            df_valid = df_yixian
+            df_invalid = pl.DataFrame()
+            valid_count = len(df_yixian)
+            invalid_count = 0
+            logger.info(f"[F6] 无标记列，所有 {valid_count} 行数据参与去重")
 
         # ── [PERF 方案D] 优化版：消除 cum_count().over() 瓶颈 ─────────
         #
@@ -129,8 +167,8 @@ class InternalDedupModule(BaseModule):
         #   3. 合并为两次join（first_in_group + group_size）
 
         # 步骤1：添加行号 + 处理空值（Polars原生，无Python循环）
-        df = df_yixian.with_columns(
-            pl.int_range(0, df_yixian.height, eager=True).alias("__row_index__"),
+        df = df_valid.with_columns(
+            pl.int_range(0, df_valid.height, eager=True).alias("__row_index__"),
             pl.col(dedup_field).fill_null("__NULL_VALUE__")
         ).sort("__row_index__")
 
@@ -210,7 +248,7 @@ class InternalDedupModule(BaseModule):
         dedup_rate = (duplicate_count / effective_rows * 100) if effective_rows > 0 else 0
 
         logger.info(
-            f"[F6] 内部去重完成：{total_rows} 行，"
+            f"[F6] 内部去重完成（有效数据）：{total_rows} 行，"
             f"原始={original_count}，重复={duplicate_count}，未知={unknown_count}，"
             f"去重率={dedup_rate:.1f}%"
         )
@@ -218,19 +256,38 @@ class InternalDedupModule(BaseModule):
         # ── 提取重复行详情 [FIX PRD F6-03] 包含所有附加列
         rejected_df = df_final.filter(pl.col(DEDUP_RESULT_COL) == REPEAT_VALUE)
 
+        # ── [20260424-老谈] 合并有效数据和无效数据 ─────────────────────
+        if invalid_count > 0:
+            # 为无效数据添加去重标记列（标记为"跳过"）
+            df_invalid_skipped = df_invalid.with_columns([
+                pl.lit("跳过").alias(DEDUP_RESULT_COL),
+                pl.lit(None).alias("_重复键值"),
+                pl.lit(0).cast(pl.Int32).alias("_出现次数"),
+                pl.lit("跳过").alias("_重复标记"),
+            ])
+            # 合并两个 DataFrame
+            df_output = pl.concat([df_final, df_invalid_skipped])
+            logger.info(f"[F6] 合并结果：有效数据 {total_rows} 行 + 无效数据 {invalid_count} 行 = {len(df_output)} 行")
+        else:
+            df_output = df_final
+
         # ── 更新上下文 ────────────────────────────────────────
-        context.set_dataframe("yixian", df_final)
+        context.set_dataframe("yixian", df_output)
 
         # ── 记录模块结果 [FIX] 包含 rejected 数据和未知数统计
+        # 统计最终结果（包含无效数据）
+        final_original = len(df_output.filter(pl.col(DEDUP_RESULT_COL) == ORIGINAL_VALUE))
+        final_duplicate = len(df_output.filter(pl.col(DEDUP_RESULT_COL) == REPEAT_VALUE))
+        final_skipped = len(df_output.filter(pl.col(DEDUP_RESULT_COL) == "跳过"))
+
         context.record_module_result(
             module="F6",
-            success_count=original_count,
-            fail_count=duplicate_count,
-            skip_count=unknown_count,  # [FIX] 内部用 skip_count，但值现在是 unknown_count
+            success_count=final_original,
+            fail_count=final_duplicate,
+            skip_count=final_skipped,
             message=(
-                f"去重完成：共 {total_rows} 行，"
-                f"原始 {original_count} 条，重复 {duplicate_count} 条，"
-                f"未知（空值）{unknown_count} 条"
+                f"[F6] 成功: {len(df_output)} 行数据，"
+                f"原始 {final_original} 条，重复 {final_duplicate} 条，跳过 {final_skipped} 条"
             ),
             rejected=rejected_df,  # [FIX] 重复行详情含 _行号/_重复键值/_出现次数/_重复标记
         )
