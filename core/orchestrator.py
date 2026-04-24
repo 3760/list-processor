@@ -148,6 +148,7 @@ class ProcessOrchestrator:
             # 4. 全流程完成
             context.status = "completed"
             summary = context.build_summary()
+            output_dir = getattr(context, 'output_path', None) or summary.get("output_dir")
             ProcessingHistoryDAO.complete_run(
                 run_id=run_id,
                 status="completed",
@@ -155,6 +156,7 @@ class ProcessOrchestrator:
                 output_records=summary.get("total_output_records", 0),
                 error_records=summary.get("total_error_records", 0),
                 summary=summary,
+                output_dir=output_dir,
             )
             logger.info(f"流程完成 run_id={run_id}")
 

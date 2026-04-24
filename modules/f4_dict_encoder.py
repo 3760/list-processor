@@ -236,8 +236,5 @@ class DictEncoderModule(BaseModule):
             ),
         )
 
-        # 额外记录统计信息（便于 F7 汇总）
-        context.module_results["F4_stats"] = stats_by_field
-
         logger.info("[F4] 数据字典上码完成")
         return context
