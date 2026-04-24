@@ -139,12 +139,12 @@ class DictValidatorModule(BaseModule):
                 # [FIX #5] 安全检查：确保 original_value_col 不为 None
                 value_key = original_value_col if original_value_col else ""
 
-                # [FIX] 使用正确的行号列（优先使用_行号，其次_row_num）
+                # [FIX] 使用行号列（_row_num）
                 for row in invalid_df.iter_rows(named=True):
                     original_value = row.get(value_key, "") if value_key else ""
                     record = {
                         "字段名": original_field,
-                        "行号": row.get("_行号", row.get("_row_num", 0)),
+                        "行号": row.get("_row_num", 0),
                         "原始值": original_value,
                         "问题类型": "DICT_NOT_FOUND",
                         "说明": f"值 '{original_value}' 在数据字典中不存在",

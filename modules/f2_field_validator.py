@@ -242,7 +242,7 @@ class FieldValidatorModule(BaseModule):
                 if err.get("问题类型"):
                     row_error_types[row_num].append(err["问题类型"])
 
-        # 添加标记列到 DataFrame
+        # 添加标记列到 DataFrame（使用 _row_num 列）
         df_yixian = df_yixian.with_columns([
             pl.col("_row_num").map_elements(
                 lambda x: "通过" if row_error_count.get(x, 0) == 0 else "不通过",

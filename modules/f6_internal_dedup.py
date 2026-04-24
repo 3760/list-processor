@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 ORIGINAL_VALUE = "原始"      # 首次出现的记录
 REPEAT_VALUE = "重复"        # 重复出现的记录
 UNKNOWN_VALUE = "未知"      # 空值/跳过记录
-DEDUP_RESULT_COL = "内部去重结果"  # 去重结果列名
+DEDUP_RESULT_COL = "_内部去重结果"  # 去重结果列名
 
 
 class InternalDedupModule(BaseModule):
@@ -196,7 +196,7 @@ class InternalDedupModule(BaseModule):
         # 步骤5：一次性向量化标注（减少 with_columns 调用次数）
         # [PERF] 用 row_index == first_row 判断是否是组内第一个
         df = df.with_columns(
-            # 内部去重结果：未知/原始/重复
+            # _内部去重结果：未知/原始/重复
             pl.when(pl.col(dedup_field) == "__NULL_VALUE__")
               .then(pl.lit("未知"))
               .when(pl.col("__row_index__") == pl.col("__first_row__"))
@@ -208,17 +208,8 @@ class InternalDedupModule(BaseModule):
               .then(pl.lit(None))
               .otherwise(pl.col(dedup_field))
               .alias("_重复键值"),
-            # _行号：1-based
-            (pl.col("__row_index__") + 1).cast(pl.Int32).alias("_行号"),
             # _出现次数：填充NULL为0
             pl.col("_出现次数").fill_null(0).cast(pl.Int32),
-            # _重复标记：同内部去重结果（直接重复逻辑，避免引用未创建列）
-            pl.when(pl.col(dedup_field) == "__NULL_VALUE__")
-              .then(pl.lit("未知"))
-              .when(pl.col("__row_index__") == pl.col("__first_row__"))
-              .then(pl.lit(ORIGINAL_VALUE))
-              .otherwise(pl.lit(REPEAT_VALUE))
-              .alias("_重复标记"),
         )
         self._report_progress(100)  # [方案C] 子任务进度
 
@@ -263,8 +254,9 @@ class InternalDedupModule(BaseModule):
                 pl.lit("跳过").alias(DEDUP_RESULT_COL),
                 pl.lit(None).alias("_重复键值"),
                 pl.lit(0).cast(pl.Int32).alias("_出现次数"),
-                pl.lit("跳过").alias("_重复标记"),
             ])
+            # 确保列顺序与 df_final 一致，避免 concat 时列名不匹配
+            df_invalid_skipped = df_invalid_skipped.select(df_final.columns)
             # 合并两个 DataFrame
             df_output = pl.concat([df_final, df_invalid_skipped])
             logger.info(f"[F6] 合并结果：有效数据 {total_rows} 行 + 无效数据 {invalid_count} 行 = {len(df_output)} 行")
@@ -289,7 +281,7 @@ class InternalDedupModule(BaseModule):
                 f"[F6] 成功: {len(df_output)} 行数据，"
                 f"原始 {final_original} 条，重复 {final_duplicate} 条，跳过 {final_skipped} 条"
             ),
-            rejected=rejected_df,  # [FIX] 重复行详情含 _行号/_重复键值/_出现次数/_重复标记
+            rejected=rejected_df,  # [FIX] 重复行详情含 _内部去重结果/_重复键值/_出现次数
         )
 
         logger.info("[F6] 名单内部去重完成")

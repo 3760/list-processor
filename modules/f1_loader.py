@@ -110,6 +110,8 @@ def load_files(
         try:
             pre_selected_sheet = sheet_selections.get(list_type)
             df = _load_single_file(file_path, list_type, pre_selected_sheet)
+            # [20260424-老谈] 添加行号列（1-indexed），供下游模块使用
+            df = df.with_columns(pl.arange(1, len(df) + 1).alias("_row_num"))
             ctx.set_dataframe(list_type, df)
             load_results.append((list_type, len(df), None))
             logger.info(f"  [{list_type}] 加载成功，{len(df)} 行")

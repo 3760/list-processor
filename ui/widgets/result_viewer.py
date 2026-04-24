@@ -93,7 +93,7 @@ class ResultViewerDialog(QDialog):
             raise ValueError("必须提供 context 或 history_record")
 
         self.setWindowTitle("处理结果查看")
-        self.setMinimumSize(900, 700)
+        self.setMinimumSize(1000, 700)
         self._init_ui()
 
     def _init_ui(self):
@@ -351,6 +351,9 @@ class ResultViewerDialog(QDialog):
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.verticalHeader().setVisible(False)
+        # [20260424-老谈] 优化：模块结果表格固定显示7行
+        table.setFixedHeight(226)  # 表头30px + 7行×28px
+        table.verticalHeader().setDefaultSectionSize(28)
         table.setStyleSheet("""
             QTableWidget {
                 border: 1px solid #E5E7EB;

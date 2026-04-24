@@ -39,7 +39,7 @@ from PyQt5.QtWidgets import (
 
 from core.context import ProcessContext
 from infra.dict_format_validator import validate_dict_format
-from infra.log_manager import get_logger
+from infra.log_manager import get_logger, LogWatcher, APP_LOG_FILE
 from ui.widgets.error_dialog import show_critical_error
 from ui.widgets.history_dialog import HistoryDialog
 from ui.widgets.result_viewer import ResultViewerDialog
@@ -141,7 +141,7 @@ HEIGHT_GROUP_CONFIG = 110           # 处理配置区块（130→110）
 HEIGHT_GROUP_MODULE = 160           # 执行模块区块（180→160）
 HEIGHT_PROGRESS = 200              # 处理进度区块（280→200）
 HEIGHT_BANNER = 50                  # 结果横幅
-HEIGHT_LOG = 80                   # 日志区域（100→80）
+HEIGHT_LOG = 380                   # 日志区域（80→380，约15行）
 HEIGHT_ROW_NORMAL = 40              # 普通行高度（与input_row一致）
 HEIGHT_ROW_MODULE = 36              # 模块行高度
 HEIGHT_ELEMENT = 36                 # 控件元素高度
@@ -288,6 +288,10 @@ class MainWindow(QMainWindow):
         self.config = config
         self.worker: Optional[ProcessingWorker] = None
         self.result_viewer: Optional[ResultViewerDialog] = None
+        
+        # [20260424-老谈] 初始化日志文件监控器（UI 从 app.log 读取新日志）
+        self._log_watcher = LogWatcher(APP_LOG_FILE, max_lines=500)
+        self._log_watcher.start(self._on_new_log_lines)
 
         # 文件路径（统一使用内部键: yixian, sanfang, hw）
         self.file_paths = {
@@ -671,8 +675,7 @@ class MainWindow(QMainWindow):
                     border-radius: 6px;
                     padding: 0 12px;
                 """)
-                self._log_message("INFO", f"已选择去重字段: {selected}")
-                logger.info(f"用户选择去重字段: {selected}")
+                logger.info(f"已选择去重字段: {selected}")
 
     def _auto_detect_dedup_field(self, columns: list) -> str:
         """
@@ -1192,7 +1195,6 @@ class MainWindow(QMainWindow):
             import subprocess
             try:
                 subprocess.run(["open", output_path], check=True)
-                self._log_message("INFO", f"已打开输出目录: {output_path}")
                 logger.info(f"用户打开输出目录: {output_path}")
             except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
                 QMessageBox.warning(self, "提示", f"无法打开输出目录：{e}")
@@ -1210,7 +1212,7 @@ class MainWindow(QMainWindow):
         - dict_loader: 字典加载器（避免下拉框枚举丢失）
         """
         self.btn_start.setEnabled(True)
-        self._log_message("INFO", "处理完成，可进行下一批次处理")
+        logger.info("处理完成，可进行下一批次处理")
 
         # [问题4] 保留必要的字段枚举信息
         retained_info = {
@@ -1289,25 +1291,65 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("就绪")
 
-    def _log_message(self, level: str, message: str):
+    def _on_new_log_lines(self, new_lines: list):
         """
-        向日志区域和状态栏写入消息（规范2.5：带新条目高亮闪烁）
+        [20260424-老谈] 日志文件监控回调 - 读取新增日志行并显示到 UI
+        注意：此方法在子线程中调用，需要通过 invokeMethod 调度到主线程
         
-        动画参数：
-        - 新条目高亮：500ms后移除
+        Parameters
+        ----------
+        new_lines : list
+            从 app.log 读取的新行列表
         """
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        formatted = f"[{timestamp}] [{level}] {message}"
+        if not hasattr(self, 'log_text') or self.log_text is None:
+            return
         
-        # 追加到日志区域
-        if hasattr(self, 'log_text'):
-            self.log_text.append(formatted)
-            # 高亮最新条目
-            self._highlight_latest_log_entry()
+        # 提取最后一条消息用于状态栏
+        last_message = ""
+        for line in new_lines:
+            msg = line.strip()
+            if " | " in msg:
+                parts = msg.split(" | ")
+                if len(parts) >= 4:
+                    last_message = parts[-1]
+        
+        # 使用 invokeMethod 确保 UI 操作在主线程执行
+        from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+        QMetaObject.invokeMethod(
+            self,
+            "_do_append_log_lines",
+            Qt.QueuedConnection,
+            Q_ARG('QVariant', new_lines),
+            Q_ARG('QVariant', last_message)
+        )
+    
+    @pyqtSlot('QVariant', 'QVariant')
+    def _do_append_log_lines(self, new_lines, last_message):
+        """[20260424-老谈] 实际执行日志追加（在主线程中调用）"""
+        if not hasattr(self, 'log_text') or self.log_text is None:
+            return
+        
+        # 追加新行
+        for line in new_lines:
+            self.log_text.append(line.rstrip())
+        
+        # 限制最大行数（避免内存占用）
+        max_lines = 500
+        doc = self.log_text.document()
+        if doc.blockCount() > max_lines:
+            cursor = self.log_text.textCursor()
+            cursor.movePosition(cursor.Start)
+            for _ in range(doc.blockCount() - max_lines):
+                cursor.select(cursor.LineUnderCursor)
+                cursor.removeSelectedText()
+                cursor.deleteChar()
+        
+        # 高亮最新条目
+        self._highlight_latest_log_entry()
         
         # 更新状态栏
-        self.status_bar.showMessage(message, 5000)  # 5秒后恢复
+        if last_message and hasattr(self, 'status_bar') and self.status_bar is not None:
+            self.status_bar.showMessage(last_message, 5000)
 
     def _highlight_latest_log_entry(self):
         """
@@ -1434,7 +1476,6 @@ class MainWindow(QMainWindow):
         from infra.log_manager import LOG_DIR
         try:
             subprocess.run(["open", LOG_DIR], check=True)
-            self._log_message("INFO", f"已打开日志目录: {LOG_DIR}")
             logger.info(f"用户打开日志目录: {LOG_DIR}")
         except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
             QMessageBox.warning(self, "提示", f"无法打开日志目录：{e}")
@@ -1491,7 +1532,7 @@ class MainWindow(QMainWindow):
         help_path = os.path.join(base_dir, "README.md")
         try:
             subprocess.run(["open", help_path], check=True)
-            self._log_message("INFO", "已打开帮助文档")
+            logger.info("用户打开帮助文档")
         except (FileNotFoundError, OSError, subprocess.CalledProcessError):  # [FIX] 限定具体异常类型
             QMessageBox.information(
                 self,
@@ -1515,7 +1556,7 @@ class MainWindow(QMainWindow):
         
         # 重置界面状态
         self._reset_all_inputs()
-        self._log_message("INFO", "已重新开始")
+        logger.info("用户重新开始")
 
     def _reset_all_inputs(self):
         """重置所有输入状态"""
@@ -1734,7 +1775,7 @@ class MainWindow(QMainWindow):
             # 显示成功状态（带文字）
             self.file_labels[file_type].setText("✅ 字典已加载")
             self._animate_file_info_success(file_type)
-            self._log_message("INFO", f"已选择 [dict]: {basename}")
+            logger.info(f"用户选择字典: {basename}")
 
     def _cancel_file_load_thread(self, file_type: str):
         """[优化] 取消指定文件类型的读取线程"""
@@ -1803,11 +1844,11 @@ class MainWindow(QMainWindow):
 
         if dialog.was_auto_selected():
             selected = sheet_names[0]
-            self._log_message("WARNING", f"[{file_type}] 选择超时，自动使用: {selected}")
+            logger.warning(f"[{file_type}] Sheet选择超时，自动使用: {selected}")
         else:
             selected = dialog.get_selected_sheet()
             if selected:
-                self._log_message("INFO", f"[{file_type}] 用户选择 Sheet: {selected}")
+                logger.info(f"[{file_type}] 用户选择 Sheet: {selected}")
             else:
                 # 用户取消
                 logger.debug(f"[_show_sheet_selection_dialog] 用户取消选择")
@@ -1895,7 +1936,7 @@ class MainWindow(QMainWindow):
         # Step 3: 更新状态（仅在格式和MD5校验均通过时）
         self._last_dict_md5 = md5_short
         # [问题5] 显示字典文件的实际修改时间
-        file_mtime = os.path.getmtime(dict_file_path)
+        file_mtime = os.path.getmtime(file_path)
         file_mtime_str = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M')
         self._update_window_title(f"字典 v{md5_short} (更新时间: {file_mtime_str})")
 
@@ -1948,8 +1989,7 @@ class MainWindow(QMainWindow):
 
             display_md5 = f"v{last_dict_md5 or '?'}" if last_dict_md5 else ""
             if from_init:
-                self._log_message("INFO", f"已自动加载字典：{os.path.basename(last_dict_path)} {display_md5}{time_info}")
-                logger.info(f"自动加载字典: {last_dict_path}")
+                logger.info(f"已自动加载字典：{os.path.basename(last_dict_path)} {display_md5}{time_info}")
             else:
                 logger.info(f"[_load_dict_default_config] 已恢复默认值: {last_dict_path}")
         else:
@@ -2039,7 +2079,7 @@ class MainWindow(QMainWindow):
 
             # [FIX v1.0.6] Bug 3: 多 Sheet 强制弹窗，禁止静默默认
             logger.debug(f"[_handle_multi_sheet_selection] 多 Sheet，弹出选择对话框...")
-            self._log_message("INFO", f"[{file_type}] 检测到 {len(sheet_names)} 个Sheet，弹出选择窗口")
+            logger.info(f"[{file_type}] 检测到 {len(sheet_names)} 个Sheet，弹出选择窗口")
             dialog = SheetSelectDialog(sheet_names, parent=self)
             dialog.exec_()
 
@@ -2047,12 +2087,12 @@ class MainWindow(QMainWindow):
                 # 超时自动选择（用户未响应）
                 selected = sheet_names[0]
                 logger.debug(f"[_handle_multi_sheet_selection] 选择超时，自动使用: {selected}")
-                self._log_message("WARNING", f"[{file_type}] 选择超时，自动使用: {selected}")
+                logger.warning(f"[{file_type}] Sheet选择超时，自动使用: {selected}")
             else:
                 selected = dialog.get_selected_sheet()
                 if selected:
                     logger.debug(f"[_handle_multi_sheet_selection] 用户选择 Sheet: {selected}")
-                    self._log_message("INFO", f"[{file_type}] 用户选择 Sheet: {selected}")
+                    logger.info(f"[{file_type}] 用户选择 Sheet: {selected}")
                 else:
                     # 用户取消
                     logger.debug(f"[_handle_multi_sheet_selection] 用户取消选择")
@@ -2090,9 +2130,7 @@ class MainWindow(QMainWindow):
             self.file_inputs["spec"].setText(self._last_spec_excel_name)
             self.file_inputs["spec"].setStyleSheet("")
             self.file_labels["spec"].setText(f"✅ 字段规范已加载：{imported_count} 个字段")
-
-            self._log_message("INFO", f"字段规范已加载：{imported_count} 个字段 ({self._last_spec_excel_name})")
-            logger.info(f"字段规范已加载: {output_path}, {imported_count} 个字段")
+            logger.info(f"字段规范已加载：{imported_count} 个字段 ({self._last_spec_excel_name})")
 
             # [FIX] 导入新规范后清除缓存，确保下次处理使用最新规范
             from infra.spec_loader import clear_cache
@@ -2276,7 +2314,7 @@ class MainWindow(QMainWindow):
                 self.file_labels[file_type].setText(info_text)
                 # 显示成功状态
                 self._animate_file_info_success(file_type)
-                self._log_message("INFO", f"已选择 [{file_type}]: {basename} ({file_info['rows']:,} 行){sheet_info}")
+                logger.info(f"已选择 [{file_type}]: {basename} ({file_info['rows']:,} 行){sheet_info}")
                 logger.debug(f"[_update_file_info_safe] UI更新完成")
 
                 # [缓存优化] 一线文件加载成功后更新列名缓存
@@ -2313,7 +2351,7 @@ class MainWindow(QMainWindow):
 
         if dir_path:
             self.txt_output.setText(dir_path)
-            self._log_message("INFO", f"输出目录: {dir_path}")
+            logger.info(f"用户设置输出目录: {dir_path}")
 
     def _update_start_button_state(self):
         """[ISSUE-14] 更新开始按钮状态"""
@@ -2361,7 +2399,7 @@ class MainWindow(QMainWindow):
                 dedup_field = self._auto_detect_dedup_field(columns)
                 self._dedup_field = dedup_field
                 self.lbl_dedup_field.setText(dedup_field)
-                self._log_message("INFO", f"自动识别去重字段: {dedup_field}")
+                logger.info(f"自动识别去重字段: {dedup_field}")
 
         # 确定输出目录
         output_dir = self.txt_output.text().strip()
@@ -2393,10 +2431,10 @@ class MainWindow(QMainWindow):
         self.result_banner.setVisible(False)
         self.progress_panel.reset()  # [FIX] 重置进度面板状态
         self.log_text.clear()
-        self._log_message("INFO", "=" * 50)
-        self._log_message("INFO", f"开始处理批次: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self._log_message("INFO", f"输出目录: {output_dir}")
-        self._log_message("INFO", f"执行模块: {', '.join(selected_modules)}")
+        logger.info("=" * 50)
+        logger.info(f"开始处理批次: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"输出目录: {output_dir}")
+        logger.info(f"执行模块: {', '.join(selected_modules)}")
 
         # [20260420-老谈] 保存当前配置作为默认值
         self._save_default_config()
@@ -2487,8 +2525,8 @@ class MainWindow(QMainWindow):
 
     def _on_processing_finished(self, context: ProcessContext):
         """处理完成回调"""
-        self._log_message("INFO", "=" * 50)
-        self._log_message("INFO", "处理完成！")
+        logger.info("=" * 50)
+        logger.info("处理完成！")
 
         # 保存上下文供按钮使用
         self._last_context = context
@@ -2525,12 +2563,15 @@ class MainWindow(QMainWindow):
         # 禁用取消按钮
         self.btn_cancel.setEnabled(False)
 
+        # [20260424-老谈] 处理结束后自动展示结果查看器
+        QTimer.singleShot(100, lambda: self._show_result_viewer(context))
+
         # 延迟重置界面
         self._reset_after_processing()
 
     def _on_processing_error(self, error_msg: str):
         """处理错误回调"""
-        self._log_message("ERROR", f"处理失败: {error_msg}")
+        logger.error(f"处理失败: {error_msg}")
         show_critical_error(self, "处理失败", error_msg)
         self.btn_start.setEnabled(True)
         self.btn_cancel.setEnabled(False)
@@ -2605,6 +2646,10 @@ class MainWindow(QMainWindow):
 
         if self.result_viewer:
             self.result_viewer.close()
+        
+        # [20260424-老谈] 停止日志文件监控
+        if hasattr(self, '_log_watcher'):
+            self._log_watcher.stop()
 
         event.accept()
         logger.info("主窗口关闭")
@@ -2704,8 +2749,7 @@ class MainWindow(QMainWindow):
             self.file_labels["spec"].setText(f"✅ 默认值{time_info}")
             # [20260420-老谈] 保存显示用的文件名，以便后续保存配置时使用
             self._last_spec_excel_name = display_name
-            self._log_message("INFO", f"已自动加载字段规范：{display_name}{time_info}")
-            logger.info(f"自动加载字段规范: {last_spec_path}, 显示名: {display_name}")
+            logger.info(f"已自动加载字段规范：{display_name}{time_info}")
 
         # 更新开始按钮状态
         self._update_start_button_state()

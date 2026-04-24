@@ -111,7 +111,7 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
         "yixian": {
             "label": "一线",
             "file_suffix": "一线名单_处理结果",
-            "sheets": ["处理摘要", "原始数据", "合规性检查结果", "字典校验结果", "重复名单结果"],
+            "sheets": ["处理摘要", "原始数据", "合规性检查结果", "字典校验结果"],
         },
         "sanfang": {
             "label": "三方",
@@ -126,6 +126,34 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
     }
     
     output_paths: Dict[str, str] = {}
+
+    # [新 20260424] 预先统计所有来源数据总行数，用于进度计算
+    total_data_rows = 0
+    for source_key in ["yixian", "sanfang", "hw"]:
+        df = ctx.get_dataframe(source_key)
+        if df is not None:
+            total_data_rows += len(df)
+
+    # [新 20260424-修正] 额外统计错误和字典总行数，用于各自的进度计算
+    total_error_rows = 0
+    for source_key in ["yixian", "sanfang", "hw"]:
+        err = ctx.error_records.get(source_key)
+        if err is not None:
+            total_error_rows += len(err)
+
+    total_dict_rows = 0
+    dict_err = ctx.error_records.get("dict_validation")
+    if dict_err is not None:
+        total_dict_rows = len(dict_err)
+
+    # [新 20260424-修正] 计算所有写入的总行数，用于全局进度计算
+    total_all_rows = total_data_rows + total_error_rows + total_dict_rows
+
+    # [新] 计算更新间隔（总行数的1%，最小100行）
+    update_interval = max(100, total_all_rows // 100) if total_all_rows > 0 else 100
+
+    # [新] 全局写入计数器（字典用于引用传递）
+    written_rows = {"data": 0, "error": 0, "dict": 0}
 
     for source_key, config in source_config.items():
         df = ctx.get_dataframe(source_key)
@@ -150,7 +178,11 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
         wb = xlsxwriter.Workbook(file_path, options={'constant_memory': True})
         try:
             # 写入各 Sheet
-            _write_single_source_sheets(wb, ctx, source_key, config["label"], progress_callback)
+            # [新 20260424] 传递总行数、写入计数器、更新间隔用于进度计算
+            _write_single_source_sheets(
+                wb, ctx, source_key, config["label"], 
+                progress_callback, total_all_rows, written_rows, update_interval
+            )
             # [PERF] close() 会将缓冲数据一次性写入磁盘
             wb.close()
             output_paths[source_key] = file_path
@@ -165,11 +197,16 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
     for source_key, file_path in output_paths.items():
         logger.debug(f"[F7]   → {source_key}: {file_path}")
     
+    # [新 20260424-修正] 所有文件写完后，通知进度到100%
+    if progress_callback:
+        progress_callback("F7", 100)
+    
     return output_paths
 
 
 def _write_single_source_sheets(
-    wb, ctx: ProcessContext, source_key: str, label: str, progress_callback=None
+    wb, ctx: ProcessContext, source_key: str, label: str, 
+    progress_callback=None, total_all_rows=0, written_rows=None, update_interval=1000
 ) -> None:
     """
     为单一名单写入所有 Sheet（使用 xlsxwriter 高效写入）。
@@ -178,7 +215,11 @@ def _write_single_source_sheets(
     [PERF] 20260422: 使用 xlsxwriter 替代 openpyxl
     [方案C] 支持 progress_callback 用于子任务进度报告
     [20260424-老谈] 修复：当 df 为空但有错误数据时，使用错误记录生成"原始数据"Sheet
+    [20260424-老谈] 新增：按全局累计行数动态更新进度（20%~100%），避免跳变
     """
+    # [新] 初始化写入计数器引用
+    if written_rows is None:
+        written_rows = {"data": 0, "error": 0, "dict": 0}
     df = ctx.get_dataframe(source_key)
     error_df = ctx.error_records.get(source_key)
     row_count = len(df) if df is not None else 0
@@ -187,44 +228,36 @@ def _write_single_source_sheets(
     # [LOG] 记录开始写入该名单的所有 Sheet
     logger.info(f"[F7] ▶ 开始写入 {label} 的各 Sheet，数据行数：{row_count}，错误行数：{error_count}")
 
-    # 1. 处理摘要 Sheet
+    # 1. 处理摘要 Sheet（摘要不计入进度，只记录日志）
     _write_summary_sheet_for_source(wb, ctx, source_key, label, df)
     logger.debug(f"[F7]   ✓ 处理摘要 Sheet 完成")
-    if progress_callback:
-        progress_callback("F7", 20)  # [方案C] 子任务进度
 
-    # 2. 原始数据 Sheet
+    # 2. 原始数据 Sheet（全局进度：20% + 累计行数占比）
     # [20260424-老谈] 修复：df 为空但有错误时，不生成"原始数据"Sheet，只保留"合规性检查结果"
     if df is not None and len(df) > 0:
-        _write_data_sheet(wb, "原始数据", df)
+        # [新] 传递 total_all_rows 用于全局进度计算
+        _write_data_sheet(wb, "原始数据", df, progress_callback, total_all_rows, written_rows, update_interval)
         logger.debug(f"[F7]   ✓ 原始数据 Sheet 完成，{row_count} 行")
     else:
         logger.debug(f"[F7]   - 原始数据 Sheet 无数据（主数据为空），跳过")
-    if progress_callback:
-        progress_callback("F7", 60)  # [方案C] 子任务进度
 
-    # 3. 合规性检查结果 Sheet（仅本来源的错误）
-    _write_error_records_sheet_for_source(wb, ctx, source_key)
+    # 3. 合规性检查结果 Sheet（继续累计进度）
+    _write_error_records_sheet_for_source(wb, ctx, source_key, progress_callback, total_all_rows, written_rows, update_interval)
     logger.debug(f"[F7]   ✓ 合规性检查 Sheet 完成")
-    if progress_callback:
-        progress_callback("F7", 75)  # [方案C] 子任务进度
 
     # 4. 字典校验结果 Sheet（如有）—— 仅一线有此 Sheet
     dict_err = ctx.error_records.get("dict_validation")
     if source_key == "yixian" and dict_err is not None and len(dict_err) > 0:
-        _write_dict_validation_sheet(wb, dict_err)
+        _write_dict_validation_sheet(wb, dict_err, progress_callback, total_all_rows, written_rows, update_interval)
         logger.debug(f"[F7]   ✓ 字典校验结果 Sheet 完成，{len(dict_err)} 行")
-        if progress_callback:
-            progress_callback("F7", 85)  # [方案C] 子任务进度
 
     # [问题2-Sheet合并] 移除单独的重复名单结果 Sheet
     # 重复数据已合并到"原始数据" Sheet中，包含以下新增列：
-    # - _重复键值、_出现次数、_重复标记、_行号、内部去重结果
+    # - _重复键值、_出现次数、_内部去重结果
     # 原代码已注释保留，便于后续需要单独Sheet时恢复
     # if source_key == "yixian":
     #     _write_repeat_records_sheet_for_source(wb, ctx)
-    if progress_callback:
-        progress_callback("F7", 100)  # [方案C] 子任务进度
+    # [删除 20260424-修正] 不再在此回调100%，由 export_results 统一管理
 
     logger.info(f"[F7] ▶ {label} 的所有 Sheet 写入完成")
 
@@ -393,14 +426,16 @@ def _write_summary_sheet_for_source(
 
 
 def _write_error_records_sheet_for_source(
-    wb, ctx: ProcessContext, source_key: str
+    wb, ctx: ProcessContext, source_key: str,
+    progress_callback=None, total_all_rows=0, written_rows=None, update_interval=1000
 ) -> None:
     """
     写入合规性检查结果 Sheet（F2 错误数据）—— 仅本来源的。
-    
+
     [20260420-老谈] ISSUE-06: 从原来的合并所有来源改为按来源独立输出
     [PERF] 20260422: 使用 xlsxwriter 写入
-    
+    [新 20260424-修正]: 使用全局累计进度（20%~100%），避免文件间跳变
+
     Parameters
     ----------
     wb : xlsxwriter.Workbook
@@ -409,6 +444,14 @@ def _write_error_records_sheet_for_source(
         处理上下文
     source_key : str
         数据源标识
+    progress_callback : callable, optional
+        进度回调函数
+    total_all_rows : int
+        所有来源（数据+错误+字典）的总行数（用于全局进度计算）
+    written_rows : dict, optional
+        全局写入计数器（字典引用）
+    update_interval : int
+        进度更新间隔
     """
     err = ctx.error_records.get(source_key)
     if err is None or len(err) == 0:
@@ -427,13 +470,22 @@ def _write_error_records_sheet_for_source(
     for col_idx, col_name in enumerate(columns):
         ws.write(0, col_idx, col_name)
 
-    # 批量写入数据行
-    LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
+    # [新 20260424-修正] 批量写入数据行 + 全局动态进度更新
+    # 进度公式：20 + (已写总行数/全局总行数) * 80
     for row_num, row_data in enumerate(err.iter_rows(), start=1):
         ws.write_row(row_num, 0, row_data)
-        if row_num % LOG_INTERVAL == 0:
+        written_rows["error"] += 1
+
+        # 按间隔更新全局进度
+        total_written = written_rows["data"] + written_rows["error"] + written_rows["dict"]
+        if total_written % update_interval == 0 and progress_callback:
+            progress = 20 + (total_written / total_all_rows) * 80 if total_all_rows > 0 else 20
+            progress_callback("F7", int(min(progress, 99)))
+
+        if row_num % 10000 == 0:
             logger.info(f"[F7]     已写入 {row_num}/{row_count} 行")
-    
+
+    # 完成后记录日志（进度由全局累计驱动，不单独回调）
     logger.debug(f"[F7]   ✓ 合规性检查结果 Sheet 完成，{len(err)} 行错误数据")
 
 
@@ -452,12 +504,31 @@ def _apply_generated_column_style(ws, columns: list) -> None:
         logger.debug(f"[F7]   → 新增列 {len(generated_cols)} 个，使用浅蓝色标注：{generated_cols}")
 
 
-def _write_dict_validation_sheet(wb, dict_err_df: pl.DataFrame) -> None:
+def _write_dict_validation_sheet(
+    wb, dict_err_df: pl.DataFrame,
+    progress_callback=None, total_all_rows=0, written_rows=None, update_interval=1000
+) -> None:
     """
     写入字典校验结果 Sheet（F5 错误数据）。
-    
+
     [20260420-老谈] ISSUE-06+17: 新增独立 Sheet（原与 F2 合并导致覆盖）
     [PERF] 20260422: 使用 xlsxwriter 写入
+    [新 20260424-修正]: 使用全局累计进度（20%~100%），避免文件间跳变
+
+    Parameters
+    ----------
+    wb : xlsxwriter.Workbook
+        Excel 工作簿对象
+    dict_err_df : pl.DataFrame
+        字典校验错误数据
+    progress_callback : callable, optional
+        进度回调函数
+    total_all_rows : int
+        所有来源（数据+错误+字典）的总行数（用于全局进度计算）
+    written_rows : dict, optional
+        全局写入计数器（字典引用）
+    update_interval : int
+        进度更新间隔
     """
     ws = wb.add_worksheet("字典校验结果")
 
@@ -469,12 +540,23 @@ def _write_dict_validation_sheet(wb, dict_err_df: pl.DataFrame) -> None:
     for col_idx, col_name in enumerate(columns):
         ws.write(0, col_idx, col_name)
 
-    # 批量写入数据行
-    LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
+    # [新 20260424-修正] 批量写入数据行 + 全局动态进度更新
+    # 进度公式：20 + (已写总行数/全局总行数) * 80
     for row_num, row_data in enumerate(dict_err_df.iter_rows(), start=1):
         ws.write_row(row_num, 0, row_data)
-        if row_num % LOG_INTERVAL == 0:
+        written_rows["dict"] += 1
+
+        # 按间隔更新全局进度
+        total_written = written_rows["data"] + written_rows["error"] + written_rows["dict"]
+        if total_written % update_interval == 0 and progress_callback:
+            progress = 20 + (total_written / total_all_rows) * 80 if total_all_rows > 0 else 20
+            progress_callback("F7", int(min(progress, 99)))
+
+        if row_num % 10000 == 0:
             logger.info(f"[F7]     已写入 {row_num}/{row_count} 行")
+
+    # 完成后记录日志（进度由全局累计驱动，不单独回调）
+    logger.debug(f"[F7]   ✓ 字典校验结果 Sheet 完成，{row_count} 行")
 
 
 def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
@@ -482,10 +564,9 @@ def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
     写入重复名单结果 Sheet（F6 去重标注）。
 
     [FIX PRD F6-03] 输出格式要求：
-      - _行号：原始数据中的行号
       - _重复键值：去重字段的实际值
       - _出现次数：该键值在数据中出现的总次数
-      - _重复标记："原始"/"重复"/"未知"（空值行）
+      - _内部去重结果："原始"/"重复"/"未知"（空值行）
     
     [优化] 新增列（_开头列、Code列等）使用浅蓝色底色标注。
     [PERF] 20260422: 使用 xlsxwriter 写入
@@ -500,7 +581,7 @@ def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
     yixian_df = ctx.get_dataframe("yixian")
     has_dedup = (
         yixian_df is not None
-        and "内部去重结果" in yixian_df.columns
+        and "_内部去重结果" in yixian_df.columns
     )
 
     # [FIX PRD F6-03] 优先输出完整的重复行详情（含新增列）
@@ -552,7 +633,7 @@ def _write_repeat_records_sheet_for_source(wb, ctx: ProcessContext) -> None:
     elif has_dedup:
         # 无 rejected 数据但有去重标记时，写统计摘要
         ws = wb.add_worksheet("重复名单结果")
-        dedup_col = yixian_df["内部去重结果"]
+        dedup_col = yixian_df["_内部去重结果"]
         orig_count = dedup_col.to_list().count("原始") if dedup_col is not None else 0
         unknown_count = dedup_col.to_list().count("未知") if dedup_col is not None else 0
         dup_count = dedup_col.to_list().count("重复") if dedup_col is not None else 0
@@ -588,10 +669,9 @@ def _is_generated_column(col_name: str) -> bool:
     这些列需要用浅蓝色底色标注。
     
     新增列的识别规则：
-    - 下划线开头的列：_行号, _重复键值, _出现次数, _重复标记, _来源, _row_num等
+    - 下划线开头的列：_重复键值, _出现次数, _内部去重结果, _来源, _row_num等
     - 特定后缀：_Code（字典上码列：客户来源_Code, 客户等级_Code）
     - 特定前缀：是否已在一线名单, 是否已在三方名单（跨名单去重标注）
-    - 内部去重结果
     
     Returns
     -------
@@ -604,13 +684,12 @@ def _is_generated_column(col_name: str) -> bool:
         return True
     if col_name in ["是否已在一线名单", "是否已在三方名单"]:
         return True
-    if col_name == "内部去重结果":
-        return True
     return False
 
 
 def _write_data_sheet(
-    wb, sheet_name: str, df: pl.DataFrame
+    wb, sheet_name: str, df: pl.DataFrame,
+    progress_callback=None, total_all_rows=0, written_rows=None, update_interval=1000
 ) -> None:
     """
     写入名单数据 Sheet。
@@ -621,15 +700,14 @@ def _write_data_sheet(
     新增列说明：
     - _重复键值：去重字段实际值
     - _出现次数：该值出现总次数
-    - _重复标记：原始/重复/未知
-    - _行号：1-based 原始行号
-    - 内部去重结果：去重标注
+    - _内部去重结果：原始/重复/未知/跳过
     - 是否已在一线名单：跨名单标注
     - 是否已在三方名单：跨名单标注
     - {field}_Code：字典上码结果列
 
     [PERF] 20260422: 使用 xlsxwriter 写入，批量缓冲高效写入
     [PERF] 20260424: 还原为逐行写入，兼容 constant_memory 模式
+    [新 20260424-修正]: 使用全局累计进度（20%~100%），避免文件间跳变
 
     Parameters
     ----------
@@ -639,6 +717,14 @@ def _write_data_sheet(
         Sheet 名称
     df : pl.DataFrame
         数据 DataFrame
+    progress_callback : callable, optional
+        进度回调函数
+    total_all_rows : int
+        所有来源（数据+错误+字典）的总行数（用于全局进度计算）
+    written_rows : dict, optional
+        全局写入计数器（字典引用）
+    update_interval : int
+        进度更新间隔
     """
     ws = wb.add_worksheet(sheet_name)
 
@@ -655,14 +741,22 @@ def _write_data_sheet(
     for col_idx, col_name in enumerate(output_columns):
         ws.write(0, col_idx, col_name)
 
-    # 逐行写入数据（兼容 constant_memory 模式）
-    LOG_INTERVAL = 10000  # 每 10000 行打印一次日志
-    for row_idx, row_data in enumerate(output_df.iter_rows(), start=1):
-        ws.write_row(row_idx, 0, row_data)
+    # [新 20260424-修正] 逐行写入数据 + 全局动态进度更新
+    # 进度公式：20 + (已写总行数/全局总行数) * 80
+    if row_count > 0:
+        for row_idx, row_data in enumerate(output_df.iter_rows(), start=1):
+            ws.write_row(row_idx, 0, row_data)
+            written_rows["data"] += 1
 
-        # 每 10000 行打印一次进度日志
-        if row_idx % LOG_INTERVAL == 0:
-            logger.info(f"[F7]     已写入 {row_idx}/{row_count} 行 ({row_idx * 100 // row_count}%)")
+            # 按间隔更新全局进度
+            total_written = written_rows["data"] + written_rows["error"] + written_rows["dict"]
+            if total_written % update_interval == 0 and progress_callback:
+                progress = 20 + (total_written / total_all_rows) * 80 if total_all_rows > 0 else 20
+                progress_callback("F7", int(min(progress, 99)))
+
+            # 每 10000 行打印一次日志
+            if row_idx % 10000 == 0:
+                logger.info(f"[F7]     已写入 {row_idx}/{row_count} 行")
 
     logger.info(f"[F7]   ✓ {sheet_name} 写入完成，{row_count} 行 × {total_cols} 列")
 
