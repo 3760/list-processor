@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont
 
 from ui.widgets.version_manager import VersionManager
+from ui.styles import get_title_qfont
 from ui.styles.button_styles import BUTTON_STYLE_SECONDARY
 
 
@@ -92,7 +93,7 @@ class VersionDialog(QDialog):
 
         # 标题
         title = QLabel("📋 版本历史")
-        title.setFont(QFont("PingFang SC", 16, QFont.Bold))  # macOS 优先字体
+        title.setFont(get_title_qfont(16, bold=True))
         layout.addWidget(title)
 
         # 弹性空间

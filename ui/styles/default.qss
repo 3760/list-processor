@@ -20,9 +20,8 @@
 - 进度条条纹：1000ms linear infinite
 */
 
-/* [20260420-老谈] 修复 macOS 字体警告 - Qt 只识别特定字体名称 */
+/* 全局字体由 main_window.py 根据平台动态注入，此处不硬编码 font-family */
 * {
-    font-family: "PingFang SC", "Helvetica Neue", "Helvetica", "Arial";
     font-size: 13px;
     color: #111827;
 }

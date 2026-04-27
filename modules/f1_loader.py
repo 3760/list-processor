@@ -24,7 +24,7 @@ def _detect_csv_encoding(file_path: str) -> str:
     [20260420-老谈] ISSUE-23: CSV 编码自动识别
     尝试多种常见编码（UTF-8 -> GBK -> GB2312），返回第一个成功的编码。
     """
-    encodings = ["utf-8", "gbk", "gb2312"]
+    encodings = ["utf-8", "gbk", "gb2312", "cp1252", "latin-1"]
     
     for encoding in encodings:
         try:

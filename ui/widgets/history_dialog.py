@@ -322,15 +322,12 @@ class HistoryDialog(QDialog):
             return
 
         # 根据系统打开目录
-        system = platform.system()
-        if system == "Windows":
-            os.startfile(output_dir)
-        elif system == "Darwin":  # macOS
-            subprocess.run(["open", output_dir])
-        else:  # Linux
-            subprocess.run(["xdg-open", output_dir])
-
-        logger.info(f"打开输出目录: {output_dir}")
+        from infra.platform_utils import open_file_or_dir
+        try:
+            open_file_or_dir(output_dir)
+            logger.info(f"打开输出目录: {output_dir}")
+        except (FileNotFoundError, PermissionError) as e:
+            QMessageBox.warning(self, "提示", f"无法打开输出目录：{e}")
 
     def _on_delete(self):
         """[20260420-老谈] 删除记录"""

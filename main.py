@@ -18,9 +18,12 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 # [20260420-老谈] macOS KVO 警告抑制 - PyQt5 在 macOS 上的已知问题
-# 禁用 Qt 窗口相关的调试警告
+# 禁用 Qt 窗口相关的调试警告（全平台通用）
 os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.window.debug=false;qt.qpa.window=false")
-os.environ.setdefault("QT_MAC_WINDOW_LAYER_IGNORE_OBSERVERS", "1")
+
+# macOS 专属：KVO 警告抑制
+if __import__('platform').system() == "Darwin":
+    os.environ.setdefault("QT_MAC_WINDOW_LAYER_IGNORE_OBSERVERS", "1")
 
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from infra.log_manager import get_logger

@@ -1,5 +1,5 @@
 version: '1.0'
-source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/业务验收/测试数据/field_spec_验收.xlsx
+source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/代码/mock_data/field_spec_验收.xlsx
 fields:
   姓名:
     attr_code: 姓名

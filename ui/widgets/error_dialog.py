@@ -224,8 +224,11 @@ class LogViewerWidget(QWidget):
         if not self.log_dir:
             return
 
-        # 使用 macOS open 命令打开 Finder
-        os.system(f'open "{self.log_dir}"')
+        from infra.platform_utils import open_file_or_dir
+        try:
+            open_file_or_dir(self.log_dir)
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
 
     def _export_log(self):
         """导出日志"""

@@ -197,6 +197,14 @@ class DictEncoderModule(BaseModule):
                 build_lookup_expr(normalized, label_to_code).alias(code_col_name)
             )
 
+            # 将 Code 列移到原始字段后面（而非默认追加到末尾）
+            cols = df_yixian.columns
+            code_idx = cols.index(code_col_name)
+            field_idx = cols.index(field_name)
+            if code_idx > field_idx + 1:
+                new_order = cols[:field_idx+1] + [code_col_name] + [c for c in cols[field_idx+1:] if c != code_col_name]
+                df_yixian = df_yixian.select(new_order)
+
             # 统计匹配/未匹配数量
             matched_count = df_yixian.filter(pl.col(code_col_name) != UNMATCHED_PLACEHOLDER).height
             unmatched_count = len(df_yixian) - matched_count

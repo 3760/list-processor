@@ -47,7 +47,7 @@ from ui.widgets.progress_panel import ProgressPanel
 from ui.widgets.sheet_select_dialog import SheetSelectDialog
 from ui.widgets.spec_import_dialog import SpecImportDialog
 from ui.widgets.dedup_field_dialog import DedupFieldDialog
-from ui.widgets.version_dialog import VersionDialog, VersionAddDialog
+from ui.widgets.version_dialog import VersionDialog
 from ui.widgets.version_manager import VersionManager
 from ui.worker import ProcessingWorker
 from ui.styles.button_styles import BUTTON_STYLE_PRIMARY_START
@@ -334,9 +334,14 @@ class MainWindow(QMainWindow):
         qss_filename = "dark.qss" if dark_mode else "default.qss"
         qss_path = os.path.join(os.path.dirname(__file__), "styles", qss_filename)
 
+        # 先注入平台适配的全局字体（避免在 QSS 中硬编码）
+        from ui.styles import get_global_font_family
+        base_qss = f"* {{ font-family: {get_global_font_family()}; }}"
+
         if os.path.exists(qss_path):
             with open(qss_path, "r", encoding="utf-8") as f:
-                self.setStyleSheet(f.read())
+                base_qss += "\n" + f.read()
+            self.setStyleSheet(base_qss)
             # [FIX] 记录当前样式文件，便于主题变化检测
             self._current_qss = qss_filename
             logger.info(f"样式已加载: {qss_filename} (深色模式: {dark_mode})")
@@ -461,7 +466,7 @@ class MainWindow(QMainWindow):
         # [原型还原] 双行布局：第一行（标签+输入框+按钮）、第二行（文件信息）
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(*MARGIN_SECTION_NARROW)
-        main_layout.setSpacing(12)
+        main_layout.setSpacing(5)
 
         self.file_inputs = {}
         self.file_labels = {}
@@ -1192,11 +1197,11 @@ class MainWindow(QMainWindow):
                 output_path = os.path.dirname(yixian_path)
 
         if output_path:
-            import subprocess
+            from infra.platform_utils import open_file_or_dir
             try:
-                subprocess.run(["open", output_path], check=True)
+                open_file_or_dir(output_path)
                 logger.info(f"用户打开输出目录: {output_path}")
-            except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+            except (FileNotFoundError, PermissionError) as e:
                 QMessageBox.warning(self, "提示", f"无法打开输出目录：{e}")
                 logger.warning(f"打开输出目录失败: {e}")
         else:
@@ -1404,14 +1409,6 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(lambda: self._select_file("yixian"))
         file_menu.addAction(open_action)
 
-        # [规范四] Ctrl+S: 保存配置
-        save_action = QAction("保存配置", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(self._save_default_config)
-        file_menu.addAction(save_action)
-
-        file_menu.addSeparator()
-
         # [规范四] Ctrl+R: 重新开始
         restart_action = QAction("重新开始", self)
         restart_action.setShortcut("Ctrl+R")
@@ -1447,13 +1444,6 @@ class MainWindow(QMainWindow):
 
         help_menu.addSeparator()
 
-        # 添加版本记录（开发者功能）
-        add_version_action = QAction("➕ 添加版本记录", self)
-        add_version_action.triggered.connect(self._add_version_record)
-        help_menu.addAction(add_version_action)
-
-        help_menu.addSeparator()
-
         # 关于
         about_action = QAction("ℹ️ 关于", self)
         about_action.triggered.connect(self._show_about)
@@ -1464,20 +1454,14 @@ class MainWindow(QMainWindow):
         dialog = VersionDialog(self)
         dialog.exec_()
 
-    def _add_version_record(self):
-        """添加新版本记录"""
-        dialog = VersionAddDialog(self)
-        if dialog.exec_():
-            QMessageBox.information(self, "成功", "版本记录已保存！")
-
     def _open_log_dir(self):
         """[ISSUE-24] 打开日志目录"""
-        import subprocess
+        from infra.platform_utils import open_file_or_dir
         from infra.log_manager import LOG_DIR
         try:
-            subprocess.run(["open", LOG_DIR], check=True)
+            open_file_or_dir(LOG_DIR)
             logger.info(f"用户打开日志目录: {LOG_DIR}")
-        except (subprocess.CalledProcessError, FileNotFoundError, PermissionError) as e:
+        except (FileNotFoundError, PermissionError) as e:
             QMessageBox.warning(self, "提示", f"无法打开日志目录：{e}")
             logger.warning(f"打开日志目录失败: {e}")
 
@@ -1498,14 +1482,12 @@ class MainWindow(QMainWindow):
             short_hash = md5_hash.hexdigest()[:8]
             filename = os.path.basename(dict_file_path)
 
-            # [问题5] 获取字典文件的实际修改时间
-            file_mtime = os.path.getmtime(dict_file_path)
-            file_mtime_dt = datetime.fromtimestamp(file_mtime)
-            file_mtime_str = file_mtime_dt.strftime('%Y-%m-%d %H:%M')
+            # 记录并显示当前导入时间
+            import_time_str = datetime.now().strftime('%Y-%m-%d %H:%M')
 
             # 显示格式：字典 v{hash} (更新时间: YYYY-MM-DD HH:MM)
-            self._update_window_title(f"字典 v{short_hash} (更新时间: {file_mtime_str})")
-            logger.info(f"字典版本: {filename} (MD5: {short_hash}, 文件更新时间: {file_mtime_str})")
+            self._update_window_title(f"字典 v{short_hash} (更新时间: {import_time_str})")
+            logger.info(f"字典版本: {filename} (MD5: {short_hash}, 导入时间: {import_time_str})")
         except (OSError, PermissionError, ValueError) as e:
             self._update_window_title(f"字典 版本检测失败")
             logger.warning(f"字典版本检测失败: {e}")
@@ -1525,15 +1507,15 @@ class MainWindow(QMainWindow):
 
     def _show_help(self):
         """[规范四] 显示帮助文档"""
-        import subprocess
         # [FIX #4] 使用相对路径替代硬编码绝对路径
         import os
+        from infra.platform_utils import open_file_or_dir
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         help_path = os.path.join(base_dir, "README.md")
         try:
-            subprocess.run(["open", help_path], check=True)
+            open_file_or_dir(help_path)
             logger.info("用户打开帮助文档")
-        except (FileNotFoundError, OSError, subprocess.CalledProcessError):  # [FIX] 限定具体异常类型
+        except (FileNotFoundError, OSError):  # [FIX] 限定具体异常类型
             QMessageBox.information(
                 self,
                 "帮助",
@@ -1935,10 +1917,12 @@ class MainWindow(QMainWindow):
 
         # Step 3: 更新状态（仅在格式和MD5校验均通过时）
         self._last_dict_md5 = md5_short
-        # [问题5] 显示字典文件的实际修改时间
-        file_mtime = os.path.getmtime(file_path)
-        file_mtime_str = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M')
-        self._update_window_title(f"字典 v{md5_short} (更新时间: {file_mtime_str})")
+        # 记录并显示导入时间
+        from db.dao.app_config import AppConfigDAO
+        import_time_dt = datetime.now()
+        AppConfigDAO.set("last_dict_import_time", import_time_dt.isoformat(), "上次导入字典的时间")
+        import_time_str = import_time_dt.strftime('%Y-%m-%d %H:%M')
+        self._update_window_title(f"字典 v{md5_short} (更新时间: {import_time_str})")
 
     def _load_dict_default_config(self, from_init: bool = False):
         """
@@ -1977,10 +1961,14 @@ class MainWindow(QMainWindow):
                     label.style().unpolish(label)
                     label.style().polish(label)
 
-            # [问题5] 显示字典文件的实际修改时间
+            # 显示导入时间（优先读取数据库记录，兼容旧数据则 fallback 到文件修改时间）
             try:
-                file_mtime = os.path.getmtime(last_dict_path)
-                file_mtime_str = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M')
+                if last_dict_time:
+                    dt = datetime.fromisoformat(last_dict_time)
+                    file_mtime_str = dt.strftime('%Y-%m-%d %H:%M')
+                else:
+                    file_mtime = os.path.getmtime(last_dict_path)
+                    file_mtime_str = datetime.fromtimestamp(file_mtime).strftime('%Y-%m-%d %H:%M')
                 time_info = f" | 更新时间: {file_mtime_str}"
                 self._update_window_title(f"字典 v{last_dict_md5 or '?'} (更新时间: {file_mtime_str})")
             except (OSError, ValueError):
@@ -2597,7 +2585,11 @@ class MainWindow(QMainWindow):
 
         # 打开输出目录
         if os.path.exists(output_dir):
-            os.startfile(output_dir) if os.name == "nt" else subprocess.run(["open", output_dir])
+            from infra.platform_utils import open_file_or_dir
+            try:
+                open_file_or_dir(output_dir)
+            except (FileNotFoundError, PermissionError) as e:
+                QMessageBox.warning(self, "提示", f"无法打开输出目录：{e}")
         else:
             QMessageBox.warning(self, "提示", f"输出目录不存在: {output_dir}")
 

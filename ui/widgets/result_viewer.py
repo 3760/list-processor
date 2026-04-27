@@ -443,7 +443,11 @@ class ResultViewerDialog(QDialog):
                 target = os.path.dirname(output_path)
 
             if target and os.path.exists(target):
-                os.system(f'open "{target}"')
+                from infra.platform_utils import open_file_or_dir
+                try:
+                    open_file_or_dir(target)
+                except (FileNotFoundError, PermissionError, OSError):
+                    pass
                 return
 
         QMessageBox.information(self, "提示", "输出目录不存在或未设置")

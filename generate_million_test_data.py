@@ -438,7 +438,8 @@ def _save_with_xlsxwriter(df, output_path, columns):
     print("  使用 CSV 中转 → xlsxwriter → Excel 方案...")
     
     # Step 1: 先写入 CSV（极快）
-    csv_path = output_path.replace('.xlsx', '_temp.csv')
+    from pathlib import Path
+    csv_path = str(Path(output_path).parent / (Path(output_path).stem + '_temp.csv'))
     print("    Step 1: 写入 CSV...")
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     csv_size = os.path.getsize(csv_path) / 1024 / 1024
@@ -487,7 +488,8 @@ def _save_with_openpyxl(df, output_path):
     print("  使用 CSV 中转 → openpyxl → Excel 方案...")
     
     # Step 1: 先写入 CSV
-    csv_path = output_path.replace('.xlsx', '_temp.csv')
+    from pathlib import Path
+    csv_path = str(Path(output_path).parent / (Path(output_path).stem + '_temp.csv'))
     print("    Step 1: 写入 CSV...")
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     csv_size = os.path.getsize(csv_path) / 1024 / 1024
