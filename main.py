@@ -56,7 +56,7 @@ def main():
             app = QApplication.instance()
 
         app.setApplicationName("客户名单数据预处理工具")
-        app.setApplicationVersion("v1.0.6")
+        app.setApplicationVersion("v1.1.0")
         # macOS 高 DPI 属性
         app.setAttribute(0x00000020, True)  # Qt.AA_EnableHighDpiScaling
         app.setAttribute(0x00000021, True)  # Qt.AA_UseHighDpiPixmaps
