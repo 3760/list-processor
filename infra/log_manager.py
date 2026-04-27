@@ -262,9 +262,14 @@ class LogWatcher:
                 
                 time.sleep(0.1)  # 100ms 检查一次
                 
-            except Exception:
-                # 忽略读取错误，继续监控
+            except (OSError, IOError) as e:
+                # 文件读取类错误可恢复（如文件被临时锁定）
+                logger.debug(f"日志监控读取错误: {e}")
                 time.sleep(0.5)
+            except Exception as e:
+                # 其他未知错误记录后停止，避免无限空转
+                logger.error(f"日志监控意外终止: {e}")
+                self._running = False
     
     def __del__(self):
         """析构时确保停止"""

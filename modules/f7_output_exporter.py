@@ -175,8 +175,9 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
         # [PERF] 20260423: constant_memory=True 逐行写入，减少内存占用
         # [FIX] 异常安全：确保 Workbook 正确关闭
         logger.info(f"[F7] 开始创建 {config['label']} 结果文件：{filename}")
-        wb = xlsxwriter.Workbook(file_path, options={'constant_memory': True})
+        wb = None
         try:
+            wb = xlsxwriter.Workbook(file_path, options={'constant_memory': True})
             # 写入各 Sheet
             # [新 20260424] 传递总行数、写入计数器、更新间隔用于进度计算
             _write_single_source_sheets(
@@ -188,7 +189,8 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
             output_paths[source_key] = file_path
             logger.info(f"[F7] ✅ {config['label']} 结果已输出至：{file_path}")
         except (OSError, IOError) as e:
-            wb.close()  # 确保文件被关闭
+            if wb is not None:
+                wb.close()  # 确保文件被关闭
             logger.error(f"[F7] ❌ {config['label']} 写入失败：{e}")
             raise  # 重新抛出异常，让调用者知道发生了错误
     

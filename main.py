@@ -27,7 +27,7 @@ if __import__('platform').system() == "Darwin":
 
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from infra.log_manager import get_logger
-from infra.exceptions import CriticalError
+from infra.exceptions import CriticalError, ProcessingError
 from infra.app_config_loader import load_app_config
 from ui.main_window import MainWindow
 

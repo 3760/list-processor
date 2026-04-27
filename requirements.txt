@@ -2,20 +2,20 @@
 # Python >= 3.10
 
 # 数据处理
-polars>=1.0.0
-openpyxl>=3.1.0
-fastexcel>=0.19.0
-xlsxwriter>=3.1.0  # [PERF] 高效 Excel 写入库
+polars~=1.0
+openpyxl~=3.1
+fastexcel~=0.19
+xlsxwriter~=3.1  # [PERF] 高效 Excel 写入库
 
 # GUI
-PyQt5>=5.15.0
+PyQt5~=5.15
 
 # 配置与序列化
-PyYAML>=6.0
+PyYAML~=6.0
 
 # 测试
-pytest>=7.0.0
-pytest-qt>=4.5.0
+pytest~=7.0
+pytest-qt~=4.5
 
 # 打包（仅在打包阶段需要）
-pyinstaller>=6.0.0
+pyinstaller~=6.0

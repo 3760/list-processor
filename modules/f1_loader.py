@@ -451,18 +451,15 @@ class FileLoaderModule(BaseModule):
         """
         # 第①级：配置文件默认值
         try:
-            import yaml, os
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            config_path = os.path.join(base_dir, "config", "app_config.yaml")
-            if os.path.exists(config_path):
-                with open(config_path, "r", encoding="utf-8") as f:
-                    cfg = yaml.safe_load(f)
+            from infra.app_config_loader import load_app_config
+            cfg = load_app_config()
+            if cfg:
                 defaults = cfg.get("deduplication", {}).get("yixian", [])
                 for candidate in defaults:
                     if candidate in yixian_df.columns:
                         logger.info(f"[F1] 去重字段来自配置（第①级）：{candidate}")
                         return candidate
-        except (OSError, yaml.YAMLError) as e:
+        except Exception as e:
             logger.debug(f"[F1] 配置文件去重字段读取失败，降级到关键字匹配：{e}")
 
         # 第②级：关键字模糊匹配

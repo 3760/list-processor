@@ -13,6 +13,10 @@ import os
 from typing import Optional
 
 from PyQt5.QtCore import Qt
+
+from infra.log_manager import get_logger
+
+logger = get_logger(__name__)
 from PyQt5.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -246,9 +250,9 @@ class LogViewerWidget(QWidget):
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(self.log_text.toPlainText())
-            except Exception as e:
-                # 静默处理导出错误
-                pass
+            except (OSError, PermissionError) as e:
+                logger.error(f"日志导出失败: {e}")
+                self.append_log(f"[导出失败] 无法保存日志: {e}")
 
 
 def show_critical_error(parent, title: str, message: str, details: str = ""):

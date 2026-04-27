@@ -15,8 +15,6 @@ UI层 - 历史记录对话框
 """
 
 import os
-import platform
-import subprocess
 from datetime import datetime
 from typing import List, Optional
 

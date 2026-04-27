@@ -171,17 +171,6 @@ class ProcessOrchestrator:
             logger.critical(f"流程关键错误 run_id={run_id}: {e}")
             raise
 
-        except CriticalError:
-            context.status = "failed"
-            context.build_summary()
-            ProcessingHistoryDAO.complete_run(
-                run_id=run_id,
-                status="failed",
-                summary=context.summary,
-            )
-            logger.critical(f"流程关键错误 run_id={run_id}")
-            raise
-
         return context
 
     def _report_progress(self, module_name: str, completed_weight: int, duration_ms: int = None):
