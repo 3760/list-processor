@@ -19,6 +19,7 @@ import polars as pl
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, pyqtSlot, Q_ARG
 from PyQt5.QtWidgets import (
     QAction,
+    QApplication,
     QCheckBox,
     QFileDialog,
     QGroupBox,
@@ -89,7 +90,7 @@ WINDOW_MIN_WIDTH = 900
 WINDOW_MIN_HEIGHT = 700
 WINDOW_MAX_WIDTH = 1200
 WINDOW_MAX_HEIGHT = 900
-WINDOW_TITLE = "客户名单数据预处理工具 v1.0.6"
+WINDOW_TITLE = "客户名单数据预处理工具"
 
 # ============================================================
 # 区块样式常量（统一圆角 8px）
@@ -319,10 +320,14 @@ class MainWindow(QMainWindow):
     def _update_window_title(self, version_suffix: str = ""):
         """更新窗口标题（带字典版本显示）- 原型风格"""
         self._dict_version_display = version_suffix
-        title = WINDOW_TITLE
+        # 动态获取应用版本号，避免硬编码
+        app_version = QApplication.instance().applicationVersion() if QApplication.instance() else ""
+        base_title = f"{WINDOW_TITLE} {app_version}" if app_version else WINDOW_TITLE
         if version_suffix:
             # 原型格式：📚 字典 v2.3 (2026-04-10)
-            title = f"{WINDOW_TITLE}  |  📚 {version_suffix}"
+            title = f"{base_title}  |  📚 {version_suffix}"
+        else:
+            title = base_title
         self.setWindowTitle(title)
 
     def _apply_stylesheet(self):
