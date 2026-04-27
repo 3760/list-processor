@@ -40,8 +40,11 @@ _data_entries = [
     ('dict/data_dict.xlsx', 'dict'),
     ('ui/styles/default.qss', 'ui/styles'),
     ('ui/styles/dark.qss', 'ui/styles'),
+    ('ui/data/version_history.json', 'ui/data'),
     # 迁移脚本：打包后用于初始化 SQLite 表结构
     ('db/migrations/001_initial.sql', 'db/migrations'),
+    # 帮助文档
+    ('README.md', '.'),
 ]
 for _src, _dst in _data_entries:
     _full = os.path.join(_PROJECT_ROOT, _src)

@@ -1512,15 +1512,19 @@ class MainWindow(QMainWindow):
 
     def _show_help(self):
         """[规范四] 显示帮助文档"""
-        # [FIX #4] 使用相对路径替代硬编码绝对路径
         import os
+        import sys
         from infra.platform_utils import open_file_or_dir
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # 兼容 PyInstaller 打包环境（sys._MEIPASS）与源码运行环境
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         help_path = os.path.join(base_dir, "README.md")
         try:
             open_file_or_dir(help_path)
             logger.info("用户打开帮助文档")
-        except (FileNotFoundError, OSError):  # [FIX] 限定具体异常类型
+        except (FileNotFoundError, OSError):
             QMessageBox.information(
                 self,
                 "帮助",

@@ -57,6 +57,44 @@ class VersionManager:
     # 初始版本记录
     INITIAL_RECORDS = [
         VersionRecord(
+            version="1.1.0",
+            date="2026-04-27",
+            author="AI助手",
+            changes=[
+                "UI/UX 全面优化：跨平台字体统一、菜单精简、按钮尺寸与圆角标准化、间距统一为 12px",
+                "UI 布局重构：区块白色背景修复、滚动区域布局优化、文件加载区域高度自适应",
+                "结果汇总模块重构：合并 Tab 展示、修复表格渲染、提取公共 button_styles.py 样式",
+                "性能与线程安全：F1 大文件读取进度细化、选择新文件时自动取消旧读取线程",
+                "核心模块增强：F7 结果导出进度优化、F6 内部去重复合并修复、字典格式预校验",
+                "兼容性修复：键名映射统一、Polars 兼容性修复、xlsx rels 解析失败修复",
+                "日志体系升级：日志管理器重构，支持实时日志监控、动态级别调整与日志导出",
+                "历史记录增强：支持打开输出目录、逻辑标记替代物理删除（软删除）",
+                "字典管理增强：字典导入时间记录与显示、MD5 变更检测与版本追踪",
+                "main.py / main.spec 版本号同步更新为 v1.1.0"
+            ],
+            bug_fixes=[
+                "UI 布局挤压、控件重叠、缩放后不自适应",
+                "历史记录删除功能缺失、打开输出目录失效",
+                "xlsx 文件 rels 解析失败",
+                "Polars filter() 与键名映射兼容性问题",
+                "F6 内部去重复合并异常",
+                "输出 Excel 处理状态显示错误"
+            ],
+            features=[
+                "跨平台字体统一与菜单精简",
+                "按钮样式标准化（button_styles.py）与 QSS/Dark 样式统一维护",
+                "结果汇总模块合并 Tab + 表格重构",
+                "大文件读取线程安全（自动取消旧线程 / 禁用浏览按钮）",
+                "F1 进度细化与 F7 导出进度优化",
+                "字典格式预校验（dict_format_validator.py）",
+                "实时日志监控与日志导出",
+                "历史记录软删除与状态图标展示",
+                "字典 MD5 版本追踪与导入时间显示",
+                "自动加载上次使用的字典、字段规范与输出目录"
+            ],
+            todo=[]
+        ),
+        VersionRecord(
             version="1.0.0",
             date="2026-04-20",
             author="老谈",
@@ -271,11 +309,12 @@ class VersionManager:
     def get_records(self) -> List[VersionRecord]:
         """获取所有版本记录（按日期倒序）
 
-        读取时自动检查并补充缺失的版本，确保与 INITIAL_RECORDS 同步
+        以 JSON 文件为唯一数据源，不再与 INITIAL_RECORDS 做同步合并，
+        避免排序逻辑依赖缺失版本条件导致顺序错误。
         """
         try:
             if not os.path.exists(self.version_file):
-                # 文件不存在，直接使用默认记录并保存
+                # 首次运行：用默认记录初始化一次
                 self._save_records(self.INITIAL_RECORDS)
                 return self.INITIAL_RECORDS.copy()
 
@@ -283,20 +322,8 @@ class VersionManager:
                 data = json.load(f)
 
             records = [VersionRecord.from_dict(item) for item in data]
-
-            # 同步检查：补充 INITIAL_RECORDS 中存在但文件中缺失的版本
-            existing_versions = {r.version for r in records}
-            missing_versions = [r for r in self.INITIAL_RECORDS
-                              if r.version not in existing_versions]
-
-            if missing_versions:
-                logger.info(f"发现 {len(missing_versions)} 个缺失版本，自动补充: "
-                           f"{[r.version for r in missing_versions]}")
-                records.extend(missing_versions)
-                # 排序后保存，确保一致性
-                records.sort(key=lambda r: r.date, reverse=True)
-                self._save_records(records)
-
+            # 始终按日期倒序，确保最新版本在最前
+            records.sort(key=lambda r: r.date, reverse=True)
             return records
         except Exception as e:
             logger.error(f"读取版本记录失败: {e}")
