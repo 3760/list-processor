@@ -45,6 +45,7 @@ _data_entries = [
     ('db/migrations/001_initial.sql', 'db/migrations'),
     # 帮助文档
     ('README.html', '.'),
+    ('客户名单数据预处理工具-操作手册.html', '.'),
 ]
 for _src, _dst in _data_entries:
     _full = os.path.join(_PROJECT_ROOT, _src)

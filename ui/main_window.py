@@ -1435,6 +1435,12 @@ class MainWindow(QMainWindow):
         help_action.triggered.connect(self._show_help)
         help_menu.addAction(help_action)
 
+        # 操作手册
+        manual_action = QAction("操作手册", self)
+        manual_action.setShortcut("F2")
+        manual_action.triggered.connect(self._show_manual)
+        help_menu.addAction(manual_action)
+
         help_menu.addSeparator()
 
         # 版本记录
@@ -1529,6 +1535,26 @@ class MainWindow(QMainWindow):
                 self,
                 "帮助",
                 "帮助文档路径不存在，请联系管理员。"
+            )
+
+    def _show_manual(self):
+        """显示操作手册"""
+        import os
+        import sys
+        from infra.platform_utils import open_file_or_dir
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        manual_path = os.path.join(base_dir, "客户名单数据预处理工具-操作手册.html")
+        try:
+            open_file_or_dir(manual_path)
+            logger.info("用户打开操作手册")
+        except (FileNotFoundError, OSError):
+            QMessageBox.information(
+                self,
+                "操作手册",
+                "操作手册路径不存在，请联系管理员。"
             )
 
     def _on_restart_processing(self):
