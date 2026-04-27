@@ -10,6 +10,8 @@
     dialog.exec_()
 """
 
+import html
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog,
@@ -39,6 +41,7 @@ class VersionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("版本记录")
         self.setMinimumSize(600, 500)
+        self.resize(600, 500)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
         self.version_manager = VersionManager()
@@ -57,6 +60,7 @@ class VersionDialog(QDialog):
         # 版本记录列表
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setObjectName("versionScrollArea")
 
         content_widget = QWidget()
@@ -108,82 +112,50 @@ class VersionDialog(QDialog):
         return widget
 
     def _create_record_card(self, record) -> QWidget:
-        """创建版本记录卡片"""
+        """创建版本记录卡片（单 QLabel RichText 减少 widget 数量与布局开销）"""
         widget = QWidget()
         widget.setObjectName("versionCard")
 
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(0)
 
-        # 版本标题行
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
+        label = QLabel(self._record_to_html(record))
+        label.setTextFormat(Qt.RichText)
+        label.setWordWrap(True)
+        label.setObjectName("versionCardContent")
+        layout.addWidget(label)
 
-        version_label = QLabel(f"v{record.version}")
-        version_label.setObjectName("versionTitle")
-        header_layout.addWidget(version_label)
+        return widget
 
-        date_label = QLabel(record.date)
-        date_label.setObjectName("versionDate")
-        header_layout.addWidget(date_label)
+    def _record_to_html(self, record) -> str:
+        """将版本记录转为 HTML"""
+        parts = []
+        parts.append(
+            '<p style="margin:0 0 6px 0;">'
+            f'<span style="font-size:15px; font-weight:bold; color:#111827;">v{html.escape(record.version)}</span> '
+            f'<span style="color:#6B7280; margin-left:8px;">{html.escape(record.date)}</span> '
+            f'<span style="color:#6B7280; margin-left:12px;">👤 {html.escape(record.author)}</span>'
+            '</p>'
+        )
+        parts.append('<hr style="border:none; border-top:1px solid #E5E7EB; margin:0 0 8px 0;">')
 
-        header_layout.addStretch()
-
-        author_label = QLabel(f"👤 {record.author}")
-        author_label.setObjectName("versionAuthor")
-        header_layout.addWidget(author_label)
-
-        layout.addLayout(header_layout)
-
-        # 分割线
-        line = QWidget()
-        line.setFixedHeight(1)
-        line.setObjectName("versionLine")
-        layout.addWidget(line)
-
-        # 变更内容
         if record.changes:
-            section = self._create_section("【变更】", record.changes)
-            layout.addWidget(section)
+            parts.append('<p style="margin:4px 0 2px 0; color:#2563EB; font-weight:500; font-size:13px;">【变更】</p>')
+            for item in record.changes:
+                parts.append(f'<p style="margin:1px 0 1px 12px; color:#374151; font-size:13px;">• {html.escape(item)}</p>')
 
-        # Bug修复
         if record.bug_fixes:
-            section = self._create_section("【Bug修复】", record.bug_fixes, is_bug=True)
-            layout.addWidget(section)
+            parts.append('<p style="margin:4px 0 2px 0; color:#DC2626; font-weight:500; font-size:13px;">【Bug修复】</p>')
+            for item in record.bug_fixes:
+                parts.append(f'<p style="margin:1px 0 1px 12px; color:#374151; font-size:13px;">• {html.escape(item)}</p>')
 
-        # 新功能
         if record.features:
-            section = self._create_section("【新功能】", record.features, is_feature=True)
-            layout.addWidget(section)
+            parts.append('<p style="margin:4px 0 2px 0; color:#059669; font-weight:500; font-size:13px;">【新功能】</p>')
+            for item in record.features:
+                parts.append(f'<p style="margin:1px 0 1px 12px; color:#374151; font-size:13px;">• {html.escape(item)}</p>')
 
-        return widget
-
-    def _create_section(self, title: str, items: list, is_bug: bool = False, is_feature: bool = False) -> QWidget:
-        """创建内容分区"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(4)
-
-        # 分区标题
-        title_label = QLabel(title)
-        if is_bug:
-            title_label.setObjectName("sectionBug")
-        elif is_feature:
-            title_label.setObjectName("sectionFeature")
-        else:
-            title_label.setObjectName("sectionTitle")
-        layout.addWidget(title_label)
-
-        # 内容项
-        for item in items:
-            item_label = QLabel(f"• {item}")
-            item_label.setWordWrap(True)
-            item_label.setObjectName("sectionItem")
-            layout.addWidget(item_label)
-
-        return widget
+        return "".join(parts)
 
 
 class VersionAddDialog(QDialog):
