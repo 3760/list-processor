@@ -178,6 +178,7 @@ def export_results(ctx: ProcessContext, output_path: str, progress_callback=None
         wb = None
         try:
             wb = xlsxwriter.Workbook(file_path, options={'constant_memory': True})
+            wb.use_zip64()
             # 写入各 Sheet
             # [新 20260424] 传递总行数、写入计数器、更新间隔用于进度计算
             _write_single_source_sheets(
