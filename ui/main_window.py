@@ -1520,7 +1520,7 @@ class MainWindow(QMainWindow):
             base_dir = sys._MEIPASS
         else:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        help_path = os.path.join(base_dir, "README.md")
+        help_path = os.path.join(base_dir, "README.html")
         try:
             open_file_or_dir(help_path)
             logger.info("用户打开帮助文档")

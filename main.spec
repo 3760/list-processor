@@ -44,7 +44,7 @@ _data_entries = [
     # 迁移脚本：打包后用于初始化 SQLite 表结构
     ('db/migrations/001_initial.sql', 'db/migrations'),
     # 帮助文档
-    ('README.md', '.'),
+    ('README.html', '.'),
 ]
 for _src, _dst in _data_entries:
     _full = os.path.join(_PROJECT_ROOT, _src)
