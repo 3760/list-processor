@@ -779,8 +779,8 @@ class MainWindow(QMainWindow):
                     # 去掉 Target 中的前导 /
                     if sheet_file.startswith('/'):
                         sheet_file = sheet_file[1:]
-                    # 如果是相对路径（不包含 /），加上 ws_dir
-                    if '/' not in sheet_file:
+                    # 相对路径补全为 ZIP 内完整路径
+                    if ws_dir and not sheet_file.startswith(ws_dir):
                         sheet_file = ws_dir + sheet_file
                 else:
                     # 默认读取第一个 sheet
@@ -793,8 +793,8 @@ class MainWindow(QMainWindow):
                     # 去掉 Target 中的前导 /
                     if sheet_file.startswith('/'):
                         sheet_file = sheet_file[1:]
-                    # 如果是相对路径（不包含 /），加上 ws_dir
-                    if '/' not in sheet_file:
+                    # 相对路径补全为 ZIP 内完整路径
+                    if ws_dir and not sheet_file.startswith(ws_dir):
                         sheet_file = ws_dir + sheet_file
                 
                 logger.debug(f"[_get_excel_columns] 读取 worksheet: {sheet_file}")
@@ -1755,9 +1755,13 @@ class MainWindow(QMainWindow):
                     return
                 
                 # 3. 获取文件信息
-                logger.info(f"[_fetch_file_and_sheet_async] [3/4] 调用 _get_file_info...")
-                file_info = self._get_file_info(file_path, selected_sheet, cancel_flag)
-                logger.info(f"[_fetch_file_and_sheet_async] [3/4] _get_file_info 完成，耗时: {time.time()-t0:.3f}s, 结果: {file_info}")
+                try:
+                    logger.info(f"[_fetch_file_and_sheet_async] [3/4] 调用 _get_file_info...")
+                    file_info = self._get_file_info(file_path, selected_sheet, cancel_flag)
+                    logger.info(f"[_fetch_file_and_sheet_async] [3/4] _get_file_info 完成，耗时: {time.time()-t0:.3f}s, 结果: {file_info}")
+                except Exception as e:
+                    logger.error(f"[_fetch_file_and_sheet_async] 获取文件信息失败: {e}", exc_info=True)
+                    file_info = {"rows": 0, "cols": 0}
                 
                 # 4. 更新 UI（带上序列号，防止旧线程覆盖新结果）
                 from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
@@ -2275,8 +2279,8 @@ class MainWindow(QMainWindow):
                         # 去掉 Target 中的前导 /
                         if sheet_file.startswith('/'):
                             sheet_file = sheet_file[1:]
-                        # 如果是相对路径（不包含 /），加上 ws_dir
-                        if '/' not in sheet_file:
+                        # 相对路径补全为 ZIP 内完整路径
+                        if ws_dir and not sheet_file.startswith(ws_dir):
                             sheet_file = ws_dir + sheet_file
                         logger.info(f"[_get_file_info] [9] 使用指定 sheet: {sheet_name} -> {sheet_file}")
                     else:
@@ -2290,8 +2294,8 @@ class MainWindow(QMainWindow):
                         # 去掉 Target 中的前导 /
                         if sheet_file.startswith('/'):
                             sheet_file = sheet_file[1:]
-                        # 如果是相对路径（不包含 /），加上 ws_dir
-                        if '/' not in sheet_file:
+                        # 相对路径补全为 ZIP 内完整路径
+                        if ws_dir and not sheet_file.startswith(ws_dir):
                             sheet_file = ws_dir + sheet_file
                         logger.info(f"[_get_file_info] [10] 最终 sheet_file: {sheet_file}")
                     
