@@ -40,7 +40,7 @@ from PyQt5.QtWidgets import (
 
 from core.context import ProcessContext
 from infra.dict_format_validator import validate_dict_format
-from infra.log_manager import get_logger, LogWatcher, APP_LOG_FILE
+from infra.log_manager import get_logger, LogWatcher, WARN_LOG_FILE
 from ui.widgets.error_dialog import show_critical_error
 from ui.widgets.history_dialog import HistoryDialog
 from ui.widgets.result_viewer import ResultViewerDialog
@@ -291,7 +291,7 @@ class MainWindow(QMainWindow):
         self.result_viewer: Optional[ResultViewerDialog] = None
         
         # [20260424-老谈] 初始化日志文件监控器（UI 从 app.log 读取新日志）
-        self._log_watcher = LogWatcher(APP_LOG_FILE, max_lines=500)
+        self._log_watcher = LogWatcher(WARN_LOG_FILE, max_lines=500)
         self._log_watcher.start(self._on_new_log_lines)
 
         # 文件路径（统一使用内部键: yixian, sanfang, hw）

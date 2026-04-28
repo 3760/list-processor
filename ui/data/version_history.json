@@ -9,6 +9,7 @@
       "帮助文档：README.md 改为 README.html，打包后路径兼容性修复",
       "菜单栏：新增操作手册入口（快捷键 F2）",
       "窗口标题：动态读取应用版本号，移除硬编码版本",
+      "日志窗口：实时监控目标从 app.log 改为 warn.log，过滤 DEBUG 级别日志",
       "main.py / main.spec 版本号同步更新为 v1.1.1"
     ],
     "bug_fixes": [
