@@ -116,7 +116,7 @@ class FieldValidatorModule(BaseModule):
             fn for fn, fv in fields_def.items()
             if isinstance(fv, dict) and (
                 fv.get("required") is True or
-                (isinstance(fv.get("required"), str) and fv.get("required", "").strip() == "是")
+                (isinstance(fv.get("required"), str) and fv.get("required", "").strip() in ("是", "√"))
             )
         ]
         logger.info(f"[F2] 字段规范：共 {len(fields_def)} 个字段定义，{len(required_fields)} 个必填字段")
@@ -294,7 +294,7 @@ class FieldValidatorModule(BaseModule):
             fn for fn, fv in fields_def.items()
             if isinstance(fv, dict) and (
                 fv.get("required") is True or
-                (isinstance(fv.get("required"), str) and fv.get("required", "").strip() == "是")
+                (isinstance(fv.get("required"), str) and fv.get("required", "").strip() in ("是", "√"))
             )
         ]
         logger.debug(f"[_check_required_fields] 必填字段共 {len(required_fields)} 个: {required_fields}")
@@ -307,8 +307,8 @@ class FieldValidatorModule(BaseModule):
             # [FIX] 处理字符串类型的"是"/"否"值
             required_val = field_def.get("required", False)
             if isinstance(required_val, str):
-                # 字符串"是"表示必填，其他值（非"是"）表示非必填
-                is_required = required_val.strip() == "是"
+                # 字符串"是"或"√"表示必填，其他值表示非必填
+                is_required = required_val.strip() in ("是", "√")
             else:
                 is_required = bool(required_val)
 
@@ -504,12 +504,17 @@ class FieldValidatorModule(BaseModule):
             if not isinstance(field_def, dict):
                 continue
 
-            regex_pattern = field_def.get("regex", "")
-            if not regex_pattern:
-                continue
-
+            # 先判断：数据里是否存在该字段
             if field_name not in df.columns:
                 continue
+
+            regex_pattern = field_def.get("regex", "")
+            # [新增] regex 为空时，按字段名匹配默认正则
+            if not regex_pattern:
+                if field_name.lower() in REGEX_PATTERNS:
+                    regex_pattern = field_name.lower()
+                else:
+                    continue
 
             # 获取实际使用的正则表达式
             if regex_pattern.lower() in REGEX_PATTERNS:

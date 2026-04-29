@@ -209,7 +209,7 @@ class ResultViewerDialog(QDialog):
 
         # 输出文件（从 summary 获取）
         summary = self._get_summary()
-        output_path = summary.get("output_dir") or (self.context.output_path if self._data_source == "context" else None)
+        output_path = summary.get("output_dir")
         if output_path:
             if os.path.isdir(output_path):
                 basename = os.path.basename(output_path.rstrip('/'))
@@ -223,27 +223,20 @@ class ResultViewerDialog(QDialog):
             row += 1
 
         # 输出数据量
-        if self._data_source == "context":
-            total_output = 0
-            for list_type, df in self.context.dataframes.items():
-                if df is not None and hasattr(df, 'height'):
-                    total_output += df.height
-        else:
-            total_output = summary.get("total_output_records", "-")
-
+        total_output = summary.get("total_output_records", "-")
         info_layout.addWidget(QLabel("<b>输出数据量：</b>"), row, 0)
         info_layout.addWidget(QLabel(str(total_output) if isinstance(total_output, int) else total_output), row, 1)
         row += 1
 
         # 去重字段
-        dedup_field = getattr(self.context, 'dedup_field', None) if self._data_source == "context" else None
+        dedup_field = summary.get("dedup_field")
         if dedup_field:
             info_layout.addWidget(QLabel("<b>去重字段：</b>"), row, 0)
             info_layout.addWidget(QLabel(dedup_field), row, 1)
             row += 1
 
         # 字典版本
-        dict_version = getattr(self.context, 'dict_version', None) if self._data_source == "context" else None
+        dict_version = summary.get("dict_version")
         if dict_version:
             info_layout.addWidget(QLabel("<b>字典版本：</b>"), row, 0)
             info_layout.addWidget(QLabel(dict_version), row, 1)
@@ -425,16 +418,10 @@ class ResultViewerDialog(QDialog):
 
     def _open_output_dir(self):
         """打开输出目录"""
-        output_path = None
-
-        if self._data_source == "context":
-            output_path = getattr(self.context, 'output_path', None)
-        else:
-            # 从历史记录获取
-            summary = self._get_summary()
-            output_path = summary.get("output_dir")
-            if not output_path:
-                output_path = self.history_record.get("output_dir")
+        summary = self._get_summary()
+        output_path = summary.get("output_dir")
+        if not output_path and self._data_source == "history":
+            output_path = self.history_record.get("output_dir")
 
         if output_path:
             if os.path.isdir(output_path):

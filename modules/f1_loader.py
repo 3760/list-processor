@@ -110,6 +110,17 @@ def load_files(
         try:
             pre_selected_sheet = sheet_selections.get(list_type)
             df = _load_single_file(file_path, list_type, pre_selected_sheet)
+
+            # ── [2行表头] 一线名单跳过英文code行 ──
+            if list_type == "yixian" and not str(file_path).lower().endswith('.csv'):
+                if not df.is_empty():
+                    english_header = df.row(0, named=False)
+                    columns = df.columns
+                    ctx.header_rows[list_type] = dict(zip(columns, english_header))
+                    df = df.slice(1, None)
+                    if df.is_empty():
+                        raise DataQualityError(f"[{list_type}] 文件只有表头无数据: {file_path}")
+
             # [20260424-老谈] 添加行号列（1-indexed），供下游模块使用
             df = df.with_columns(pl.arange(1, len(df) + 1).alias("_row_num"))
             ctx.set_dataframe(list_type, df)

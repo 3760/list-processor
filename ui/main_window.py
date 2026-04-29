@@ -779,7 +779,7 @@ class MainWindow(QMainWindow):
                     # 去掉 Target 中的前导 /
                     if sheet_file.startswith('/'):
                         sheet_file = sheet_file[1:]
-                    # 相对路径补全为 ZIP 内完整路径
+                    # [FIX] 相对路径补全为 ZIP 内完整路径
                     if ws_dir and not sheet_file.startswith(ws_dir):
                         sheet_file = ws_dir + sheet_file
                 else:
@@ -793,7 +793,7 @@ class MainWindow(QMainWindow):
                     # 去掉 Target 中的前导 /
                     if sheet_file.startswith('/'):
                         sheet_file = sheet_file[1:]
-                    # 相对路径补全为 ZIP 内完整路径
+                    # [FIX] 相对路径补全为 ZIP 内完整路径
                     if ws_dir and not sheet_file.startswith(ws_dir):
                         sheet_file = ws_dir + sheet_file
                 
@@ -1757,7 +1757,7 @@ class MainWindow(QMainWindow):
                 # 3. 获取文件信息
                 try:
                     logger.info(f"[_fetch_file_and_sheet_async] [3/4] 调用 _get_file_info...")
-                    file_info = self._get_file_info(file_path, selected_sheet, cancel_flag)
+                    file_info = self._get_file_info(file_path, selected_sheet, cancel_flag, file_type)
                     logger.info(f"[_fetch_file_and_sheet_async] [3/4] _get_file_info 完成，耗时: {time.time()-t0:.3f}s, 结果: {file_info}")
                 except Exception as e:
                     logger.error(f"[_fetch_file_and_sheet_async] 获取文件信息失败: {e}", exc_info=True)
@@ -1890,8 +1890,8 @@ class MainWindow(QMainWindow):
         basename = os.path.basename(file_path) if file_path else ""
         
         logger.debug(f"[_show_sheet_selection_dialog] 获取文件信息: sheet={selected}, seq={current_seq}")
-        file_info = self._get_file_info(file_path, selected)
-        
+        file_info = self._get_file_info(file_path, selected, None, file_type)
+
         # 更新 UI（带上序列号）
         self._update_file_info_safe(file_type, file_info, selected, basename, current_seq)
 
@@ -2179,18 +2179,21 @@ class MainWindow(QMainWindow):
             logger.warning(f"读取Excel Sheet列表失败: {e}")
             return []
 
-    def _get_file_info(self, file_path: str, sheet_name: str = None, cancel_flag=None) -> dict:
+    def _get_file_info(self, file_path: str, sheet_name: str = None, cancel_flag=None, list_type: str = None) -> dict:
         """
         获取文件基本信息（列数、行数）
         cancel_flag: threading.Event，可选，用于支持取消操作
         [优化 v1.0.7] CSV 使用 line count，Excel 直接解析 XML（比 openpyxl 快 5-10 倍）
-        
+        [2行表头] 根据 list_type 修正行数统计（一线-2，其他-1）
+
         Parameters
         ----------
         file_path : str
             文件路径
         sheet_name : str, optional
             指定要读取的 sheet 名称。如果为 None，则读取第一个 sheet。
+        list_type : str, optional
+            名单类型（yixian/sanfang/hw），用于区分表头行数
         """
         import html
         import re, zipfile
@@ -2279,7 +2282,7 @@ class MainWindow(QMainWindow):
                         # 去掉 Target 中的前导 /
                         if sheet_file.startswith('/'):
                             sheet_file = sheet_file[1:]
-                        # 相对路径补全为 ZIP 内完整路径
+                        # [FIX] 如果是相对路径，加上 ws_dir 前缀
                         if ws_dir and not sheet_file.startswith(ws_dir):
                             sheet_file = ws_dir + sheet_file
                         logger.info(f"[_get_file_info] [9] 使用指定 sheet: {sheet_name} -> {sheet_file}")
@@ -2294,7 +2297,7 @@ class MainWindow(QMainWindow):
                         # 去掉 Target 中的前导 /
                         if sheet_file.startswith('/'):
                             sheet_file = sheet_file[1:]
-                        # 相对路径补全为 ZIP 内完整路径
+                        # [FIX] 如果是相对路径，加上 ws_dir 前缀
                         if ws_dir and not sheet_file.startswith(ws_dir):
                             sheet_file = ws_dir + sheet_file
                         logger.info(f"[_get_file_info] [10] 最终 sheet_file: {sheet_file}")
@@ -2306,8 +2309,13 @@ class MainWindow(QMainWindow):
                 
                 # 统计 <row 标签数量获取行数
                 t1 = time_module.time()
-                result["rows"] = len(re.findall(r'<row ', xml_content))
-                logger.info(f"[_get_file_info] [13] Excel 行数: {result['rows']}, 耗时: {time_module.time()-t1:.3f}s")
+                raw_rows = len(re.findall(r'<row ', xml_content))
+                # [2行表头] 根据名单类型修正行数（减去表头行数）
+                if list_type == "yixian" and not str(file_path).lower().endswith('.csv'):
+                    result["rows"] = max(0, raw_rows - 2)
+                else:
+                    result["rows"] = max(0, raw_rows - 1)
+                logger.info(f"[_get_file_info] [13] Excel 原始行数: {raw_rows}, 修正后: {result['rows']}, 耗时: {time_module.time()-t1:.3f}s")
                 
                 # 解析第一行获取列数（从 <row r="1" 开始到第一个 </row>）
                 t1 = time_module.time()
@@ -2644,8 +2652,10 @@ class MainWindow(QMainWindow):
 
     def _show_result_viewer(self, context: ProcessContext):
         """显示结果查看器"""
-        if self.result_viewer is None:
-            self.result_viewer = ResultViewerDialog(context, self)
+        if self.result_viewer is not None:
+            self.result_viewer.close()
+            self.result_viewer.deleteLater()
+        self.result_viewer = ResultViewerDialog(context, self)
         self.result_viewer.show()
         self.result_viewer.raise_()
         self.result_viewer.activateWindow()

@@ -237,9 +237,14 @@ def _write_single_source_sheets(
 
     # 2. 原始数据 Sheet（全局进度：20% + 累计行数占比）
     # [20260424-老谈] 修复：df 为空但有错误时，不生成"原始数据"Sheet，只保留"合规性检查结果"
+    # [2行表头] 构建英文表头（如有），新增列填充"系统生成"
+    english_header_map = ctx.header_rows.get(source_key)
+    english_header = None
+    if english_header_map and df is not None:
+        english_header = [english_header_map.get(col, "系统生成") for col in df.columns]
     if df is not None and len(df) > 0:
         # [新] 传递 total_all_rows 用于全局进度计算
-        _write_data_sheet(wb, "原始数据", df, progress_callback, total_all_rows, written_rows, update_interval)
+        _write_data_sheet(wb, "原始数据", df, progress_callback, total_all_rows, written_rows, update_interval, english_header)
         logger.debug(f"[F7]   ✓ 原始数据 Sheet 完成，{row_count} 行")
     else:
         logger.debug(f"[F7]   - 原始数据 Sheet 无数据（主数据为空），跳过")
@@ -692,7 +697,8 @@ def _is_generated_column(col_name: str) -> bool:
 
 def _write_data_sheet(
     wb, sheet_name: str, df: pl.DataFrame,
-    progress_callback=None, total_all_rows=0, written_rows=None, update_interval=1000
+    progress_callback=None, total_all_rows=0, written_rows=None, update_interval=1000,
+    english_header: list = None
 ) -> None:
     """
     写入名单数据 Sheet。
@@ -711,6 +717,7 @@ def _write_data_sheet(
     [PERF] 20260422: 使用 xlsxwriter 写入，批量缓冲高效写入
     [PERF] 20260424: 还原为逐行写入，兼容 constant_memory 模式
     [新 20260424-修正]: 使用全局累计进度（20%~100%），避免文件间跳变
+    [2行表头] 支持恢复2行表头（中文+英文code）
 
     Parameters
     ----------
@@ -728,6 +735,8 @@ def _write_data_sheet(
         全局写入计数器（字典引用）
     update_interval : int
         进度更新间隔
+    english_header : list, optional
+        英文code行，存在时写入2行表头
     """
     ws = wb.add_worksheet(sheet_name)
 
@@ -740,14 +749,22 @@ def _write_data_sheet(
 
     logger.info(f"[F7]   → 开始写入 {sheet_name}，{row_count} 行 × {total_cols} 列")
 
-    # 写入表头（第0行）
-    for col_idx, col_name in enumerate(output_columns):
-        ws.write(0, col_idx, col_name)
+    # [2行表头] 写入表头：2行（中文+英文）或1行（中文）
+    if english_header:
+        for col_idx, col_name in enumerate(output_columns):
+            ws.write(0, col_idx, col_name)
+        for col_idx, eng_name in enumerate(english_header):
+            ws.write(1, col_idx, eng_name)
+        start_row = 2
+    else:
+        for col_idx, col_name in enumerate(output_columns):
+            ws.write(0, col_idx, col_name)
+        start_row = 1
 
     # [新 20260424-修正] 逐行写入数据 + 全局动态进度更新
     # 进度公式：20 + (已写总行数/全局总行数) * 80
     if row_count > 0:
-        for row_idx, row_data in enumerate(output_df.iter_rows(), start=1):
+        for row_idx, row_data in enumerate(output_df.iter_rows(), start=start_row):
             ws.write_row(row_idx, 0, row_data)
             written_rows["data"] += 1
 

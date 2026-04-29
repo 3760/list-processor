@@ -193,7 +193,7 @@ def _parse_row(row: tuple, col_map: dict) -> Optional[dict]:
     val = get_val("required")
     if val is not None:
         val_str = str(val).strip().lower()
-        required = val_str in ("是", "1", "true")
+        required = val_str in ("是", "√", "1", "true")
 
     # 数据类型
     data_type = "string"
