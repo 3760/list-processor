@@ -77,6 +77,7 @@ class ProcessContext:
     output_path: Optional[str] = None  # F7 输出文件路径
     dict_file_path: Optional[str] = None  # 数据字典文件路径（F1 加载后设置）
     spec_file_path: Optional[str] = None  # 字段规范文件路径（F1 加载后设置）
+    header_rows: Dict[str, Dict[str, str]] = field(default_factory=dict)  # [2行表头] 存储英文code行 {list_type: {col_name: eng_name}}
 
     def set_input_file(self, list_type: str, file_path: str) -> None:
         """设置指定类型名单的输入文件路径"""
