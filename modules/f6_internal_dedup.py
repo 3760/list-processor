@@ -263,6 +263,9 @@ class InternalDedupModule(BaseModule):
         else:
             df_output = df_final
 
+        # [FIX] 按原始行号排序，恢复 Excel 原始顺序
+        df_output = df_output.sort("_row_num")
+
         # ── 更新上下文 ────────────────────────────────────────
         context.set_dataframe("yixian", df_output)
 

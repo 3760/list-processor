@@ -2652,8 +2652,10 @@ class MainWindow(QMainWindow):
 
     def _show_result_viewer(self, context: ProcessContext):
         """显示结果查看器"""
-        if self.result_viewer is None:
-            self.result_viewer = ResultViewerDialog(context, self)
+        if self.result_viewer is not None:
+            self.result_viewer.close()
+            self.result_viewer.deleteLater()
+        self.result_viewer = ResultViewerDialog(context, self)
         self.result_viewer.show()
         self.result_viewer.raise_()
         self.result_viewer.activateWindow()

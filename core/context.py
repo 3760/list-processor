@@ -160,5 +160,8 @@ class ProcessContext:
             "total_error_records": total_error,
             "module_results": module_results_serializable,
             "status": self.status,
+            "dedup_field": self.dedup_field,
+            "dict_version": getattr(self, "dict_version", None),
+            "output_dir": self.output_path,
         }
         return self.summary
