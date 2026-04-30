@@ -86,18 +86,19 @@ class PriorityDedupModule(BaseModule):
             logger.warning("[F3] 前置检查未通过：去重字段未设置")
             return False, "[F3] 跳过: 去重字段未识别"
 
-        # ── 检查3：去重字段是否存在于存在的名单中 ─────────────
-        has_valid_df = False
-        if df_yixian is not None and context.dedup_field in df_yixian.columns:
-            has_valid_df = True
-        if df_sanfang is not None and context.dedup_field in df_sanfang.columns:
-            has_valid_df = True
-        if df_hw is not None and context.dedup_field in df_hw.columns:
-            has_valid_df = True
+        # ── 检查3：去重字段是否存在于所有已上传的名单中 ─────────────
+        missing_in = []
+        if df_yixian is not None and context.dedup_field not in df_yixian.columns:
+            missing_in.append("一线")
+        if df_sanfang is not None and context.dedup_field not in df_sanfang.columns:
+            missing_in.append("三方")
+        if df_hw is not None and context.dedup_field not in df_hw.columns:
+            missing_in.append("HW")
 
-        if not has_valid_df:
-            logger.warning(f"[F3] 前置检查未通过：去重字段 '{context.dedup_field}' 在所有名单中均不存在")
-            return False, f"[F3] 跳过: 去重字段 '{context.dedup_field}' 在数据中不存在"
+        if missing_in:
+            missing_msg = "、".join(missing_in)
+            logger.warning(f"[F3] 前置检查未通过：去重字段 '{context.dedup_field}' 在 {missing_msg} 名单中不存在")
+            return False, f"[F3] 跳过: 去重字段 '{context.dedup_field}' 在 {missing_msg} 名单中不存在"
 
         logger.info(f"[F3] 前置检查通过：去重字段='{context.dedup_field}'，合规数据 {valid_count} 行")
         return True, ""
@@ -192,7 +193,7 @@ class PriorityDedupModule(BaseModule):
             success_count=sanfang_new,
             fail_count=sanfang_in_yixian + hw_in_yixian,
             message=(
-                f"[F3] 成功: 三方新增 {sanfang_new} 条（重复 {sanfang_in_yixian} 条）"
+                f"[F3] 成功: 三方名单 {sanfang_new} 条（重复 {sanfang_in_yixian} 条）"
             ),
         )
 

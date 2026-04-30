@@ -1,30 +1,165 @@
 version: '1.0'
-source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/代码/mock_data/field_spec_验收.xlsx
+source: /Users/mars/Desktop/00_Work-Ipsos/01_项目/00_售前项目/20260315_华为/名单处理工具-AI流程/业务验收/客户导入测试_20260430-销售伙伴问卷测试V3/属性导入模版V2.xlsx
 fields:
-  姓名:
-    attr_code: 姓名
+  批次:
+    attr_code: batch
+    required: true
+    type: 文本型
+    sub_type: 输入框
+  serial_from_ipsos:
+    attr_code: serial_from_ipsos
     required: true
     type: 文本型
     sub_type: 输入框
   邮箱:
-    attr_code: 邮箱
+    attr_code: email
     required: true
     type: 文本型
     sub_type: 输入框
-  手机:
-    attr_code: 手机
+  手机号:
+    attr_code: mobile
     required: false
     type: 文本型
     sub_type: 输入框
-  客户来源:
-    attr_code: 客户来源
+  客户名称:
+    attr_code: customer_name
     required: true
     type: 文本型
-    sub_type: 单选项
-    dict_id: A2
-  客户等级:
-    attr_code: 客户等级
-    required: false
+    sub_type: 输入框
+  是否测试客户:
+    attr_code: is_test
+    required: true
     type: 文本型
     sub_type: 下拉单选
-    dict_id: A1
+    dict_id: is_test
+  拒绝短信状态:
+    attr_code: refuse_msg_status
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: refuse_msg_status
+  拒绝邮件状态:
+    attr_code: refuse_mail_status
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: refuse_mail_status
+  A1区域:
+    attr_code: region
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: region
+  A2国家:
+    attr_code: country
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: Country
+  A1b代表处:
+    attr_code: representativeoffic
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: RepresentativeOffice
+  A1a地区部:
+    attr_code: businessgroup
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: regionalDepartment
+  A3名单类型:
+    attr_code: namelisttype
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: nameListType
+  A11客户_NA属性:
+    attr_code: customernatype
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: CustomerNAType
+  A10客户_子行业属性:
+    attr_code: customerlevelindustr
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: CustomerLevelIndustry
+  A9客户_一层行业属性:
+    attr_code: customerleveloneindu
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: CustomerLevelOneIndustry
+  AA10伙伴身份:
+    attr_code: partneridentity
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: PartnerIdentity
+  AA9伙伴类型:
+    attr_code: partnertype
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: PartnerType
+  A7政企业务部:
+    attr_code: governmententerprise
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: BusinessGroup
+  A15受访者层级:
+    attr_code: titlelevel
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: TitleLevel
+  AA15是否战略NC样本:
+    attr_code: whetherncsample
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: WhetherNCSample
+  AA21是否服务人员:
+    attr_code: whetherservicestaff
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: WhetherServiceStaff
+  AA20销售伙伴作战场景:
+    attr_code: salespartnerbusiness
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: SalesPartnerBusinessArea
+  A2a聚焦国非聚焦国:
+    attr_code: focusedcountriesnonf
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: FocusedCountriesNonFocusCo
+  A16定性定量样本:
+    attr_code: qualiorquantisample
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: QualiOrQuantiSample
+  A19定向问卷发放类型具体产品解决方案:
+    attr_code: predefinedproductsol
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: PreDefinedProductSolution
+  A18是否需要发放定向问卷:
+    attr_code: whethertosendtargete
+    required: true
+    type: 文本型
+    sub_type: 下拉单选
+    dict_id: WhetherToSendTargetedQuest
+  语言个数:
+    attr_code: numberoflanguage
+    required: true
+    type: 数值型
+    sub_type: 整数类型
